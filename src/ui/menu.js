@@ -9,7 +9,8 @@
 import { game } from '../core/game.js';
 import { ITEMS, RARITY } from '../data/items.js';
 import { SKILLS } from '../data/skills.js';
-import { MAX_ACTIVE_PETS } from '../data/pets.js';
+import { MAX_ACTIVE_PETS, PETS } from '../data/pets.js';
+import { isRegistered, allAnimalIds } from '../systems/encyclopedia.js';
 import { effectiveStats, equipItem, unequipSlot, useConsumable } from '../systems/inventory.js';
 import { expToNext, LEVEL_CAP } from '../systems/leveling.js';
 import { treeNodes, hasLearned, canLearn, learnNode } from '../systems/skillTree.js';
@@ -53,12 +54,14 @@ function renderMenu() {
     if (activeTab === 'char') body = renderCharTab(hero);
     else if (activeTab === 'skills') body = renderSkillsTab(hero);
     else if (activeTab === 'party') body = renderPartyTab();
+    else if (activeTab === 'codex') body = renderCodexTab();
 
     document.getElementById('menu-body').innerHTML = `
-        <div class="flex gap-1.5 mb-3">
+        <div class="flex flex-wrap gap-1.5 mb-3">
             ${tabBtn('char', '🛡️ 캐릭터·장비')}
             ${tabBtn('skills', '✨ 스킬트리')}
             ${tabBtn('party', '🐾 동물 보호소')}
+            ${tabBtn('codex', '📖 도감')}
         </div>
         <div>${body}</div>
         <div id="menu-note" class="text-[11px] text-emerald-300 mt-2 min-h-[16px]"></div>`;
@@ -252,6 +255,38 @@ function renderPartyTab() {
         </div>
         <div class="grid md:grid-cols-2 gap-2 mb-2">${heroCard}</div>
         <div class="grid md:grid-cols-2 gap-2">${petCards}</div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- 도감 탭
+function renderCodexTab() {
+    const ids = allAnimalIds();
+    const done = ids.filter((id) => isRegistered(id)).length;
+
+    const cards = ids.map((id) => {
+        const a = PETS[id];
+        if (isRegistered(id)) {
+            return `<div class="bg-slate-950/60 rounded-lg p-3 border border-emerald-700">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-3xl">${a.emoji}</span>
+                    <div class="text-sm font-bold text-white">${a.name}</div>
+                </div>
+                <div class="text-[11px] text-slate-300 leading-relaxed">${a.eco}</div>
+            </div>`;
+        }
+        return `<div class="bg-slate-900/50 rounded-lg p-3 border border-dashed border-slate-700 text-center">
+            <div class="text-3xl mb-1 grayscale opacity-40">❔</div>
+            <div class="text-xs text-slate-500">미발견</div>
+            <div class="text-[10px] text-slate-600 mt-1">덫에서 동물을 구출하면 기록됩니다</div>
+        </div>`;
+    }).join('');
+
+    return `<div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-black text-emerald-300">멸종위기 야생생물 도감</div>
+            <div class="text-[11px] text-slate-400">등록 <b class="text-emerald-300">${done}/${ids.length}</b></div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-2">${cards}</div>
     </div>`;
 }
 

@@ -105,6 +105,21 @@
                     <div id="shop-flash" class="text-[11px] text-emerald-300 mb-2 min-h-[14px]"></div>
                     <div id="shop-body" class="flex-1"></div>
                 </div>
+
+                <!-- 대화창 (하단 고정, 초상화 + 타이핑 + 선택지) -->
+                <div id="dialogue-box" class="hidden absolute inset-x-0 bottom-0 z-40 p-3 cursor-pointer select-none">
+                    <div class="dlg-frame">
+                        <div class="flex items-stretch gap-3">
+                            <div id="dlg-portrait" class="dlg-portrait">💬</div>
+                            <div class="flex-1 min-w-0">
+                                <div id="dlg-speaker" class="dlg-speaker">이름</div>
+                                <div id="dlg-text" class="dlg-text"></div>
+                                <div id="dlg-choices" class="dlg-choices"></div>
+                                <div id="dlg-hint" class="dlg-hint hidden">▶ 스페이스 / 클릭으로 계속</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 조작 가이드 -->

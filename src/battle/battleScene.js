@@ -20,6 +20,7 @@ import { basicAttack, useSkill, useItem, defend, tryFlee } from './battleCommand
 import { effectiveStats, addItem } from '../systems/inventory.js';
 import { gainHeroExp, gainPetExp } from '../systems/leveling.js';
 import { learnedActiveSkillIds } from '../systems/skillTree.js';
+import { recordKill } from '../systems/quests.js';
 import { attachFx, initCombatantFx, updateFx, skipFx, spawnBanner, drawProjectiles, drawParticles } from './battleFx.js';
 
 // 원거리(투사체) 직업/펫 여부 — 근접(leo/taro)은 lunge, 원거리(aria/lumi/펫)는 투사체
@@ -131,6 +132,7 @@ function spriteToCombatant(sprite) {
     });
     c.reward = { exp: sprite.data.exp || 0, gold: sprite.data.gold || 0 };
     c.drops = sprite.data.drops || [];
+    c.monsterId = sprite.data.id;
     return c;
 }
 
@@ -296,6 +298,9 @@ function beginResult(outcome) {
         const petRefs = new Set();
         B.allies.filter((a) => !a.isPlayer && a.ref).forEach((a) => petRefs.add(a.ref));
         petRefs.forEach((p) => gainPetExp(p, reward.exp));
+
+        // 퀘스트 처치 카운트 기록
+        B.enemies.forEach((e) => { if (e.monsterId) recordKill(e.monsterId); });
 
         // 아이템 드롭
         const drops = [];

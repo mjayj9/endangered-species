@@ -40,8 +40,17 @@ export const game = {
     bag: [],
     equipped: { weapon: null, armor: null, accessory: null },
 
-    // 오버레이 UI 상태: 'none' | 'menu' | 'shop' (열려 있으면 오버월드 갱신 정지)
+    // 오버레이 UI 상태: 'none' | 'menu' | 'shop' | 'dialogue' (열려 있으면 오버월드 갱신 정지)
     overlay: 'none',
+
+    // 퀘스트 진행 상태 { questId: 'active' | 'complete' } (Phase 6에서 localStorage 저장)
+    quests: {},
+    // 처치 카운트 등 퀘스트 진행 수치 { questId: number }
+    questProgress: {},
+    // 스토리 플래그 { key: true } (오프닝/배후 세력 떡밥 등)
+    flags: {},
+    // 도감 등록된 동물 id 목록
+    encyclopedia: [],
 
     // 화면 전환 연출 상태
     transition: { active: false, t: 0, dir: 1, onMid: null },

@@ -26,6 +26,8 @@ import { updateDamageTexts } from './ui/damageText.js';
 import { toggleMenu, closeMenu } from './ui/menu.js';
 import { closeShop } from './ui/shop.js';
 import { updateTransition, renderTransition } from './render/transition.js';
+import { startDialogue } from './ui/dialogue.js';
+import { registerAnimal } from './systems/encyclopedia.js';
 
 // --- 캔버스 셋업 ---
 function setupCanvas() {
@@ -63,6 +65,11 @@ function selectCharacter(key) {
         p.active = sp.active;
         return p;
     });
+    // 시작 펫은 도감에 자동 등록
+    game.encyclopedia = [];
+    game.pets.forEach((p) => registerAnimal(p.id));
+    // 퀘스트/플래그 초기화
+    game.quests = {}; game.questProgress = {}; game.flags = {};
 
     // 인벤토리/장비 초기화
     game.inventory = { ...STARTER_INVENTORY };
@@ -76,6 +83,9 @@ function selectCharacter(key) {
 
     document.getElementById('char-select-screen').classList.add('hidden');
     game.scene = 'overworld';
+
+    // 오프닝 대화(여행을 떠나는 동기 설명) 자동 재생
+    startDialogue('intro');
 }
 
 // --- 메인 루프 ---

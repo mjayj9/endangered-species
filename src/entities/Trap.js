@@ -6,8 +6,8 @@
 
 import { game } from '../core/game.js';
 import { createPet, PETS } from '../data/pets.js';
-import { spawnText } from '../ui/damageText.js';
 import { playSound } from '../core/audio.js';
+import { startDialogue } from '../ui/dialogue.js';
 
 export class Trap {
     constructor(data) {
@@ -29,9 +29,20 @@ export class Trap {
         pet.active = false; // 보호소(대기)로 합류 — 파티 편성에서 출전 지정
         game.pets.push(pet);
 
+        // 구출 성공 대화 → 마지막에 도감 자동 등록 알림
         const base = PETS[this.animalId];
-        spawnText(this.x, this.y - 12, `${base.emoji} ${base.name} 구출!`, '#34d399');
-        spawnText(this.x, this.y - 30, '동물 보호소에 합류했습니다', '#a7f3d0');
+        startDialogue({
+            start: 'n0',
+            nodes: {
+                n0: { speaker: base.name, portrait: base.emoji, text: `${this.desc}\n덫을 풀자 ${base.name}이(가) 힘겹게 몸을 일으켰다.`, next: 'n1' },
+                n1: { speaker: base.name, portrait: base.emoji, text: base.eco, next: 'n2' },
+                n2: {
+                    speaker: '📖 도감', portrait: '📖',
+                    text: `${base.emoji} ${base.name}의 생태 정보가 도감에 등록되었습니다!\n동물 보호소(메뉴 Tab)에 새 동료로 합류했습니다.`,
+                    effect: `encyclopedia.register:${this.animalId}`, end: true,
+                },
+            },
+        });
     }
 
     draw(ctx, camera, player) {
