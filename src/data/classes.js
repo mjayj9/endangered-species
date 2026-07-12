@@ -1,8 +1,8 @@
 // ============================================================
 // 4직업(주인공) 기본 데이터
 //  - 콘텐츠는 로직과 분리해 여기서만 관리한다.
-//  - Phase 1에서는 색상 / 이모지 / 오버월드 이동속도 / 기본 스탯 필드까지만 사용.
-//    (스킬트리 노드, 성장곡선 세부는 Phase 3~4에서 이 파일에 확장한다.)
+//  - stats: 1레벨 기본 스탯. growth: 레벨업 시 레벨당 상승치(직업별 성장 곡선).
+//  - 스킬트리 노드는 Phase 4에서 이 파일/skills.js 에 확장한다.
 // ============================================================
 
 export const CLASSES = {
@@ -16,6 +16,7 @@ export const CLASSES = {
         desc: '쫑긋 솟은 호랑이 귀 머리장식. 날카로운 단검을 휘두르는 근접 물리 딜러입니다.',
         moveSpeed: 5.2,            // 오버월드 이동 속도(px/frame)
         stats: { hp: 120, maxHp: 120, mp: 30, maxMp: 30, atk: 28, def: 6, spd: 9 },
+        growth: { hp: 14, mp: 3, atk: 4, def: 2, spd: 1 }, // 레벨당 성장치
     },
     aria: {
         key: 'aria',
@@ -27,6 +28,7 @@ export const CLASSES = {
         desc: '귀여운 다람쥐 귀 장식. 도토리 마법봉으로 정화 마법을 연사하는 원거리 딜러입니다.',
         moveSpeed: 5.0,
         stats: { hp: 90, maxHp: 90, mp: 60, maxMp: 60, atk: 24, def: 4, spd: 11 },
+        growth: { hp: 9, mp: 7, atk: 5, def: 1, spd: 2 },
     },
     taro: {
         key: 'taro',
@@ -38,6 +40,7 @@ export const CLASSES = {
         desc: '초록 모자와 등껍질 장식. 든든한 수호 망치로 적을 막아서는 방어 탱커입니다.',
         moveSpeed: 4.4,
         stats: { hp: 160, maxHp: 160, mp: 25, maxMp: 25, atk: 20, def: 12, spd: 6 },
+        growth: { hp: 20, mp: 2, atk: 3, def: 4, spd: 1 },
     },
     lumi: {
         key: 'lumi',
@@ -49,6 +52,7 @@ export const CLASSES = {
         desc: '긴 여우 귀와 꼬리 장식. 신성 구체로 아군을 치유하는 회복 사제입니다.',
         moveSpeed: 5.0,
         stats: { hp: 100, maxHp: 100, mp: 70, maxMp: 70, atk: 18, def: 5, spd: 8 },
+        growth: { hp: 11, mp: 8, atk: 3, def: 2, spd: 1 },
     },
 };
 

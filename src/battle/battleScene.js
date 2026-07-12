@@ -18,6 +18,8 @@ import { ITEMS } from '../data/items.js';
 import { MONSTERS } from '../data/monsters.js';
 
 import { basicAttack, useSkill, useItem, defend, tryFlee } from './battleCommands.js';
+import { effectiveStats, addItem } from '../systems/inventory.js';
+import { gainHeroExp, gainPetExp } from '../systems/leveling.js';
 
 const THEME_BG = {
     forest: ['#14532d', '#052e16'],
@@ -34,11 +36,12 @@ let B = null; // 현재 전투 컨텍스트
 export function startBattle(enemySprite) {
     const hero = game.player;
 
-    // 아군: 주인공 + 활성 펫(임시). 벤치 펫은 교체 커맨드로 투입.
+    // 아군: 주인공(장비 보너스 포함 최종 스탯) + 활성 펫. 벤치 펫은 교체로 투입.
+    const eff = effectiveStats(hero);
     const heroC = new Combatant({
         name: hero.name, emoji: hero.emoji, color: hero.color, side: 'ally', isPlayer: true,
-        maxHp: hero.maxHp, hp: hero.hp, maxMp: hero.maxMp, mp: hero.mp,
-        atk: hero.atk, def: hero.def, spd: hero.spd,
+        maxHp: eff.maxHp, hp: Math.min(hero.hp, eff.maxHp), maxMp: eff.maxMp, mp: Math.min(hero.mp, eff.maxMp),
+        atk: eff.atk, def: eff.def, spd: eff.spd,
         skillIds: CLASS_SKILLS[hero.heroKey] || [], ref: hero,
     });
 
@@ -100,6 +103,7 @@ function spriteToCombatant(sprite) {
         maxHp: s.maxHp, hp: s.hp, atk: s.atk, def: s.def, spd: s.spd,
     });
     c.reward = { exp: sprite.data.exp || 0, gold: sprite.data.gold || 0 };
+    c.drops = sprite.data.drops || [];
     return c;
 }
 
@@ -229,13 +233,37 @@ function beginResult(outcome) {
 
     if (outcome === 'victory') {
         playSound('correct');
+
+        // 전투 중 hp/mp 를 먼저 원본에 반영(레벨업 전회복이 덮어쓸 수 있음)
+        const heroC = B.allies.find((a) => a.isPlayer);
+        if (heroC) { game.player.hp = heroC.hp; game.player.mp = heroC.mp; }
+
         const reward = B.enemies.reduce(
             (acc, e) => ({ exp: acc.exp + (e.reward?.exp || 0), gold: acc.gold + (e.reward?.gold || 0) }),
             { exp: 0, gold: 0 }
         );
         game.gold += reward.gold;
-        game.player.exp = (game.player.exp || 0) + reward.exp; // 레벨업은 Phase 3
-        B.msg(`승리! 경험치 +${reward.exp}, 골드 +${reward.gold}`);
+
+        // 주인공 경험치/레벨업
+        const lvMsgs = gainHeroExp(game.player, reward.exp);
+
+        // 전투 참여 펫 경험치 (B.allies 의 펫 원본에 지급, 중복 제거)
+        const petRefs = new Set();
+        B.allies.filter((a) => !a.isPlayer && a.ref).forEach((a) => petRefs.add(a.ref));
+        petRefs.forEach((p) => gainPetExp(p, reward.exp));
+
+        // 아이템 드롭
+        const drops = [];
+        B.enemies.forEach((e) => {
+            (e.drops || []).forEach((d) => {
+                if (Math.random() < d.chance) { addItem(d.itemId, 1); drops.push(ITEMS[d.itemId].name); }
+            });
+        });
+
+        let msg = `승리! 경험치 +${reward.exp}, 골드 +${reward.gold}`;
+        if (drops.length) msg += ` · 획득: ${drops.join(', ')}`;
+        if (lvMsgs.length) { msg += ` · ${lvMsgs[lvMsgs.length - 1]}`; B.addFloater(heroC, 'LEVEL UP!', '#facc15'); }
+        B.msg(msg);
     } else {
         playSound('wrong');
         B.msg('파티가 쓰러졌다... 마을로 귀환합니다.');
@@ -245,21 +273,15 @@ function beginResult(outcome) {
 function finishBattle() {
     document.getElementById('battle-ui').classList.add('hidden');
     clearMenu();
-
-    // 주인공 hp/mp 를 원본에 반영
     const heroC = B.allies.find((a) => a.isPlayer);
-    if (heroC && game.player) {
-        game.player.hp = heroC.hp;
-        game.player.mp = heroC.mp;
-    }
 
-    if (B.outcome === 'victory' || B.outcome === 'flee') {
-        if (B.outcome === 'victory') {
-            // 처치한 몬스터를 필드에서 제거
-            game.monsters = game.monsters.filter((m) => m !== B.sourceEnemy);
-        } else {
-            applyReturnCooldown(B.sourceEnemy);
-        }
+    if (B.outcome === 'victory') {
+        // hp/mp 는 beginResult 에서 이미 반영(레벨업 전회복 포함). 처치 몬스터 제거.
+        game.monsters = game.monsters.filter((m) => m !== B.sourceEnemy);
+    } else if (B.outcome === 'flee') {
+        // 도망: 전투 중 입은 피해를 유지
+        if (heroC) { game.player.hp = heroC.hp; game.player.mp = heroC.mp; }
+        applyReturnCooldown(B.sourceEnemy);
     } else if (B.outcome === 'defeat') {
         // 마을(시작 지점) 귀환 + HP 1 부활
         game.player.hp = 1;
@@ -405,12 +427,18 @@ function renderItemMenu() {
     m.innerHTML = '';
     const list = document.createElement('div');
     list.className = 'flex flex-col gap-1.5';
-    Object.keys(ITEMS).forEach((id) => {
+    // 소비 아이템만 노출 (장비는 game.bag 이라 전투 아이템 커맨드에 뜨지 않음)
+    consumableIds().forEach((id) => {
         const count = game.inventory[id] || 0;
         list.appendChild(makeBtn(`${ITEMS[id].emoji} ${ITEMS[id].name}  x${count}`, () => playerItem(id), count <= 0));
     });
     list.appendChild(makeBtn('◀ 뒤로', renderRootMenu));
     m.appendChild(list);
+}
+
+// 보유 중인 소비 아이템 id 목록
+function consumableIds() {
+    return Object.keys(game.inventory).filter((id) => ITEMS[id]?.category === 'consumable');
 }
 
 function renderSwapMenu() {
@@ -442,7 +470,7 @@ function pickTarget(candidates, onPick) {
 }
 
 function hasAnyItem() {
-    return Object.keys(ITEMS).some((id) => (game.inventory[id] || 0) > 0);
+    return consumableIds().some((id) => (game.inventory[id] || 0) > 0);
 }
 
 // ------------------------------------------------------------

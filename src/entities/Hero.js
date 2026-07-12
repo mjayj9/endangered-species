@@ -27,9 +27,10 @@ export class Hero {
         this.width = 36; this.height = 50;
         this.facingDir = 'down';
 
-        // 경험치(레벨업은 Phase 3에서 구현)
+        // 성장(레벨업/경험치/스킬포인트). maxHp/atk 등은 레벨업 시 성장 곡선으로 상승.
         this.exp = 0;
         this.level = 1;
+        this.sp = 0; // 스킬 포인트(획득만; 소비는 Phase 4)
     }
 
     // keys: core/input 의 keys, map: 현재 맵 데이터

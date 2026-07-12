@@ -11,8 +11,8 @@ import { playSound } from './core/audio.js';
 
 import { CLASSES } from './data/classes.js';
 import { MAPS, START_MAP } from './data/maps.js';
-import { DUMMY_PETS } from './data/pets.js';
-import { STARTER_INVENTORY } from './data/items.js';
+import { createPet, STARTER_ACTIVE_PETS, STARTER_BENCH_PETS } from './data/pets.js';
+import { STARTER_INVENTORY, STARTER_EQUIPMENT } from './data/items.js';
 
 import { Hero } from './entities/Hero.js';
 import { Camera } from './world/camera.js';
@@ -22,6 +22,8 @@ import { updateBattle, renderBattle } from './battle/battleScene.js';
 import { renderCharSelect } from './ui/charSelect.js';
 import { updateHud } from './ui/hud.js';
 import { updateDamageTexts } from './ui/damageText.js';
+import { toggleMenu, closeMenu } from './ui/menu.js';
+import { closeShop } from './ui/shop.js';
 
 // --- 캔버스 셋업 ---
 function setupCanvas() {
@@ -52,13 +54,17 @@ function selectCharacter(key) {
     game.player.x = game.map.spawn.x;
     game.player.y = game.map.spawn.y;
 
-    // 파티/인벤토리 초기화 (Phase 2 전투용 임시 더미)
-    //  - 활성 펫 1마리 + 벤치 펫 1마리로 교체 커맨드까지 시험 가능하게 구성.
+    // 파티 초기화 (레벨/경험치를 가진 펫 인스턴스)
     game.party = {
-        active: [structuredClone(DUMMY_PETS[0])],
-        bench: [structuredClone(DUMMY_PETS[1])],
+        active: STARTER_ACTIVE_PETS.map(createPet),
+        bench: STARTER_BENCH_PETS.map(createPet),
     };
+
+    // 인벤토리/장비 초기화
     game.inventory = { ...STARTER_INVENTORY };
+    game.bag = [...STARTER_EQUIPMENT];
+    game.equipped = { weapon: null, armor: null, accessory: null };
+    game.overlay = 'none';
 
     // 카메라 + 필드 초기화
     game.camera = new Camera();
@@ -100,10 +106,30 @@ function gameLoop() {
     }
 }
 
+// --- 메뉴/상점 오버레이 입력 (Tab 토글 / Esc 닫기 / HUD 버튼) ---
+function initOverlayControls() {
+    document.getElementById('ui-menu-btn')?.addEventListener('click', () => {
+        if (game.scene === 'overworld') toggleMenu();
+    });
+    document.getElementById('menu-close')?.addEventListener('click', closeMenu);
+    document.getElementById('shop-close')?.addEventListener('click', closeShop);
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (game.scene === 'overworld' && game.overlay !== 'shop') toggleMenu();
+        } else if (e.key === 'Escape') {
+            if (game.overlay === 'menu') closeMenu();
+            else if (game.overlay === 'shop') closeShop();
+        }
+    });
+}
+
 // --- 부팅 ---
 function boot() {
     setupCanvas();
     initInput(() => game.scene);
+    initOverlayControls();
     renderCharSelect(selectCharacter);
     gameLoop();
 }

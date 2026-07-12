@@ -19,12 +19,16 @@
             <!-- 상단 타이틀 + 실시간 HUD 대시보드 -->
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 px-2 gap-2">
                 <div class="flex items-center space-x-2">
-                    <span class="bg-emerald-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-md">RPG · PHASE 1</span>
+                    <span class="bg-emerald-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-md">RPG</span>
                     <h3 class="text-sm md:text-base font-extrabold text-emerald-300">
                         <i class="fa-solid fa-leaf mr-1.5"></i>에코 가디언즈: 멸종위기 수호 연대기
                     </h3>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-xs bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
+                    <div class="flex items-center gap-1.5 bg-emerald-900/30 border border-emerald-500/30 px-2 py-1 rounded-lg">
+                        <i class="fa-solid fa-star text-emerald-400"></i>
+                        <span id="ui-level" class="font-black text-emerald-300 text-sm leading-none">Lv.1</span>
+                    </div>
                     <div class="flex items-center gap-1.5 bg-amber-900/30 border border-amber-500/30 px-2 py-1 rounded-lg">
                         <i class="fa-solid fa-coins text-yellow-400"></i>
                         <span id="ui-gold" class="font-black text-yellow-300 text-sm leading-none">0</span>
@@ -42,6 +46,10 @@
                         <i class="fa-solid fa-location-dot text-sky-400"></i>
                         <span id="ui-zone" class="font-black text-sky-300 text-[11px] leading-none">에메랄드 숲</span>
                     </div>
+                    <button id="ui-menu-btn"
+                        class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-transform active:scale-95">
+                        <i class="fa-solid fa-bars-staggered mr-1"></i>메뉴(Tab)
+                    </button>
                 </div>
             </div>
 
@@ -76,6 +84,27 @@
                     <div id="battle-menu"
                         class="absolute bottom-3 left-1/2 -translate-x-1/2 w-[300px] max-w-[92%] glass-panel rounded-2xl p-2 pointer-events-auto"></div>
                 </div>
+
+                <!-- 통합 메뉴 오버레이 (캐릭터/장비/인벤토리) -->
+                <div id="menu-overlay" class="hidden absolute inset-0 bg-slate-950/92 z-30 flex flex-col p-4 overflow-y-auto">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-black text-emerald-300"><i class="fa-solid fa-shield-halved mr-1.5"></i>수호대 메뉴</h3>
+                        <button id="menu-close" class="bg-red-500 hover:bg-red-400 text-white font-extrabold text-xs px-4 py-1.5 rounded-lg">닫기 (Esc)</button>
+                    </div>
+                    <div id="menu-body" class="flex-1"></div>
+                </div>
+
+                <!-- 상점 오버레이 -->
+                <div id="shop-overlay" class="hidden absolute inset-0 bg-slate-950/92 z-30 flex flex-col p-4 overflow-y-auto">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-black text-amber-300"><i class="fa-solid fa-store mr-1.5"></i>친환경 수호 상점
+                            <span class="text-xs text-slate-400 ml-2">보유 골드 <span id="shop-gold" class="text-yellow-300 font-black">0</span>G</span>
+                        </h3>
+                        <button id="shop-close" class="bg-red-500 hover:bg-red-400 text-white font-extrabold text-xs px-4 py-1.5 rounded-lg">닫기 (Esc)</button>
+                    </div>
+                    <div id="shop-flash" class="text-[11px] text-emerald-300 mb-2 min-h-[14px]"></div>
+                    <div id="shop-body" class="flex-1"></div>
+                </div>
             </div>
 
             <!-- 조작 가이드 -->
@@ -87,7 +116,7 @@
                     <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">몬스터 접촉</span> 전투 씬 진입
                 </div>
                 <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
-                    <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">E</span> 상호작용 (다음 Phase)
+                    <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">E</span> 상점/상자 상호작용
                 </div>
             </div>
         </div>
