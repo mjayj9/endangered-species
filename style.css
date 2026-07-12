@@ -1,0 +1,38 @@
+/* 에코 가디언즈 RPG - 전역 스타일 */
+@import url('https://fonts.googleapis.com/css2?family=Jua&family=Nanum+Gothic:wght@400;700;800&display=swap');
+
+body {
+    font-family: 'Nanum Gothic', sans-serif;
+}
+
+.fancy-title {
+    font-family: 'Jua', sans-serif;
+}
+
+/* 대화창/전투 안내 등 반투명 유리 패널 (기존 프로젝트 스타일 계승) */
+.glass-panel {
+    background: rgba(2, 6, 23, 0.92);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(250, 204, 21, 0.4);
+}
+
+/* 전체화면 대응 */
+#game-viewport:fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    aspect-ratio: auto !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+/* 데미지/상태 텍스트 파티클 (viewport 위에 절대배치되어 떠오름) */
+.game-text-particle {
+    position: absolute;
+    font-weight: 900;
+    font-size: 11px;
+    pointer-events: none;
+    white-space: nowrap;
+    text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9);
+    z-index: 30;
+}
