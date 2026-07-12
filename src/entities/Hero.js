@@ -52,6 +52,10 @@ export class Hero {
             this.vx = 0; this.vy = 0;
         }
 
+        // 걸음 애니메이션 상태
+        this.moving = (this.vx !== 0 || this.vy !== 0);
+        this.walkTimer = (this.walkTimer || 0) + (this.moving ? 0.35 : 0.05);
+
         this.x += this.vx;
         this.y += this.vy;
 
@@ -77,11 +81,18 @@ export class Hero {
         const camX = camera.x, camY = camera.y;
         ctx.save();
 
-        // 그림자
+        // 그림자 (바운스와 무관하게 바닥 고정)
         ctx.fillStyle = 'rgba(0,0,0,0.15)';
         ctx.beginPath();
         ctx.ellipse(this.x - camX, this.y - camY + 12, 14, 6, 0, 0, Math.PI * 2);
         ctx.fill();
+
+        // 걸음 바운스(위아래) + 이동 방향에 따른 좌우 반전
+        const px = this.x - camX, py = this.y - camY;
+        const bob = this.moving ? Math.abs(Math.sin(this.walkTimer)) * 3 : Math.sin(this.walkTimer) * 0.8;
+        ctx.save();
+        ctx.translate(0, -bob);
+        if (this.facingDir === 'left') { ctx.translate(px, 0); ctx.scale(-1, 1); ctx.translate(-px, 0); }
 
         // 머리 (공용 베이스)
         const headGrad = ctx.createRadialGradient(
@@ -170,8 +181,10 @@ export class Hero {
         ctx.fillRect(this.x - camX - 6, this.y - camY - 8, 3, 2);
         ctx.fillRect(this.x - camX + 3, this.y - camY - 8, 3, 2);
 
+        ctx.restore(); // 바운스/반전 변환 종료 (체력바는 흔들리지 않게 바깥에서)
+
         // 머리 위 체력바
-        drawStatBar(ctx, this.x - camX - 15, this.y - camY - 35, 30, 4, this.hp / this.maxHp, '#10b981');
+        drawStatBar(ctx, this.x - camX - 15, this.y - camY - 35 - (this.moving ? Math.abs(Math.sin(this.walkTimer)) * 3 : 0), 30, 4, this.hp / this.maxHp, '#10b981');
         ctx.restore();
     }
 }

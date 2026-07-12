@@ -8,21 +8,24 @@ import { game } from '../core/game.js';
 import { startBattle } from '../battle/battleScene.js';
 import { spawnText } from '../ui/damageText.js';
 import { playSound } from '../core/audio.js';
+import { transition, startTransition } from '../render/transition.js';
 
 const ENCOUNTER_DIST = 26; // 접촉 판정 거리
 const RETURN_COOLDOWN = 90; // 전투 복귀 후 재접촉 무시(프레임)
 
 export function checkEncounters() {
+    if (transition.active) return; // 전환 연출 중엔 재트리거 금지
     const p = game.player;
 
     for (const m of game.monsters) {
         if (m.cooldown > 0) continue;
         const dist = Math.hypot(p.x - m.x, p.y - m.y);
         if (dist < ENCOUNTER_DIST + m.radius) {
-            playSound('hit');
-            game.camera.addShake(10);
+            playSound('skill');
+            game.camera.addShake(12);
             spawnText(m.x, m.y - 10, '⚔️ 전투 발생!', '#facc15');
-            startBattle(m);
+            // 셔터/플래시 전환 중간 시점에 실제 전투 진입
+            startTransition(() => startBattle(m));
             return; // 한 프레임에 하나만 처리
         }
     }

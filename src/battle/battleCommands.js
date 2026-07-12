@@ -1,7 +1,7 @@
 // ============================================================
 // 전투 커맨드 처리 (공격/스킬/아이템/방어/도망)
-//  - 각 함수는 전투 컨텍스트 B 와 행동 주체/대상을 받아 효과를 적용하고
-//    로그용 메시지 문자열을 반환한다. (턴 진행/사망 판정은 battleScene 이 담당)
+//  - 데미지/회복 "계산과 적용"은 여기서 그대로 수행(로직 불변).
+//  - 시각 연출은 B.reportHit / B.reportHeal / B.reportBuff 로 위임(battleFx).
 //  - 교체(swap)는 파티 배열을 다루므로 battleScene 에서 처리.
 // ============================================================
 
@@ -9,11 +9,16 @@ import { computeDamage, computeHeal } from './damageFormula.js';
 import { ITEMS } from '../data/items.js';
 import { game } from '../core/game.js';
 
+// 큰 타격(대상 최대 HP의 30% 초과)을 치명타 스타일로 연출 (계산식은 변경 없음)
+function isBig(target, dmg) {
+    return dmg > target.maxHp * 0.3;
+}
+
 // 기본 공격 (무기 데미지 = power 100)
 export function basicAttack(B, actor, target) {
     const dmg = computeDamage(actor, target, 100);
     target.takeDamage(dmg);
-    B.addFloater(target, `-${dmg}`, '#fca5a5');
+    B.reportHit(target, dmg, isBig(target, dmg));
     return `${actor.name}의 공격! ${target.name}에게 ${dmg} 피해`;
 }
 
@@ -25,19 +30,19 @@ export function useSkill(B, actor, skill, targets) {
         targets.forEach((t) => {
             const dmg = computeDamage(actor, t, skill.power);
             t.takeDamage(dmg);
-            B.addFloater(t, `-${dmg}`, '#fca5a5');
+            B.reportHit(t, dmg, isBig(t, dmg));
         });
         return `${actor.name} - ${skill.name}!`;
     } else if (skill.type === 'heal') {
         targets.forEach((t) => {
             const h = computeHeal(actor, skill.power);
             t.heal(h);
-            B.addFloater(t, `+${h}`, '#34d399');
+            B.reportHeal(t, h);
         });
         return `${actor.name} - ${skill.name}! 아군 회복`;
     } else if (skill.type === 'buff') {
         actor.defending = true; // 철옹성: 방어 태세
-        B.addFloater(actor, '방어!', '#38bdf8');
+        B.reportBuff(actor);
         return `${actor.name} - ${skill.name}! 방어 태세`;
     }
     return '';
@@ -50,7 +55,7 @@ export function useItem(B, actor, itemId, target) {
 
     if (item.kind === 'heal') {
         target.heal(item.power);
-        B.addFloater(target, `+${item.power}`, '#34d399');
+        B.reportHeal(target, item.power);
     } else if (item.kind === 'mp') {
         target.restoreMp(item.power);
         B.addFloater(target, `+${item.power} MP`, '#38bdf8');
@@ -61,7 +66,7 @@ export function useItem(B, actor, itemId, target) {
 // 방어 태세
 export function defend(B, actor) {
     actor.defending = true;
-    B.addFloater(actor, '방어!', '#38bdf8');
+    B.reportBuff(actor);
     return `${actor.name}이(가) 방어 태세를 취했다`;
 }
 

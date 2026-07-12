@@ -25,6 +25,7 @@ import { updateHud } from './ui/hud.js';
 import { updateDamageTexts } from './ui/damageText.js';
 import { toggleMenu, closeMenu } from './ui/menu.js';
 import { closeShop } from './ui/shop.js';
+import { updateTransition, renderTransition } from './render/transition.js';
 
 // --- 캔버스 셋업 ---
 function setupCanvas() {
@@ -84,6 +85,7 @@ function gameLoop() {
     if (!ctx) return;
 
     // 1) 업데이트
+    updateTransition();
     if (game.scene === 'overworld') {
         updateOverworld();
     } else if (game.scene === 'battle') {
@@ -101,6 +103,9 @@ function gameLoop() {
         renderBattle(ctx);
     }
     ctx.restore();
+
+    // 2.5) 화면 전환 연출 (씬 위에 덮어 그림)
+    renderTransition(ctx, game.canvas.width, game.canvas.height);
 
     // 3) HUD / 떠오르는 텍스트
     if (game.scene !== 'charSelect') {
