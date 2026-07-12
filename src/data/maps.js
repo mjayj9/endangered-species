@@ -44,6 +44,17 @@ export const MAPS = {
             { monsterId: 'trapdrone', x: 520, y: 820 },
             { monsterId: 'sludge', x: 1400, y: 320 },
         ],
+
+        // NPC 배치 (허브 마을 개념 — 시작 지점 근처에 상점 상인)
+        npcs: [
+            { type: 'shop', name: '숲지기 상인', emoji: '🧑‍🌾', x: 250, y: 320 },
+        ],
+
+        // 보물상자 배치 (E로 열어 골드 + 아이템 획득)
+        chests: [
+            { x: 900, y: 200, gold: 40, loot: [{ itemId: 'hi_potion', chance: 0.6 }, { itemId: 'iron_sword', chance: 0.25 }] },
+            { x: 1500, y: 900, gold: 60, loot: [{ itemId: 'bark_mail', chance: 0.5 }, { itemId: 'spirit_ring', chance: 0.12 }] },
+        ],
     },
 };
 

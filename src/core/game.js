@@ -28,6 +28,20 @@ export const game = {
     // 자원(재화) — Phase 3에서 상점/전투 보상과 연동
     gold: 0,
 
+    // 파티 편성: 전투 출전(active, 주인공 제외 펫) / 대기(bench)
+    //  - Phase 2에서는 교체 커맨드 시험용 더미 펫이 들어간다(Phase 4에서 실제 구현).
+    party: { active: [], bench: [] },
+
+    // 소비 아이템 인벤토리 { itemId: 개수 }
+    inventory: {},
+
+    // 장비: 보유(미장착) 목록 + 장착 슬롯 3종
+    bag: [],
+    equipped: { weapon: null, armor: null, accessory: null },
+
+    // 오버레이 UI 상태: 'none' | 'menu' | 'shop' (열려 있으면 오버월드 갱신 정지)
+    overlay: 'none',
+
     // 화면 전환 연출 상태
     transition: { active: false, t: 0, dir: 1, onMid: null },
 

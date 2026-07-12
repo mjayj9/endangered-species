@@ -5,6 +5,10 @@ body {
     font-family: 'Nanum Gothic', sans-serif;
 }
 
+/* 핵심 표시/숨김 폴백: Tailwind CDN 로드 실패 시에도 오버레이 토글이 동작하도록 보장.
+   (Tailwind가 정상 로드되면 동일 규칙이라 충돌하지 않음) */
+.hidden { display: none !important; }
+
 .fancy-title {
     font-family: 'Jua', sans-serif;
 }
