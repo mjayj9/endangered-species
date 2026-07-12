@@ -26,6 +26,10 @@ export class Hero {
         this.vx = 0; this.vy = 0;
         this.width = 36; this.height = 50;
         this.facingDir = 'down';
+
+        // 경험치(레벨업은 Phase 3에서 구현)
+        this.exp = 0;
+        this.level = 1;
     }
 
     // keys: core/input 의 keys, map: 현재 맵 데이터

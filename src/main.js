@@ -11,6 +11,8 @@ import { playSound } from './core/audio.js';
 
 import { CLASSES } from './data/classes.js';
 import { MAPS, START_MAP } from './data/maps.js';
+import { DUMMY_PETS } from './data/pets.js';
+import { STARTER_INVENTORY } from './data/items.js';
 
 import { Hero } from './entities/Hero.js';
 import { Camera } from './world/camera.js';
@@ -49,6 +51,14 @@ function selectCharacter(key) {
     game.map = MAPS[START_MAP];
     game.player.x = game.map.spawn.x;
     game.player.y = game.map.spawn.y;
+
+    // 파티/인벤토리 초기화 (Phase 2 전투용 임시 더미)
+    //  - 활성 펫 1마리 + 벤치 펫 1마리로 교체 커맨드까지 시험 가능하게 구성.
+    game.party = {
+        active: [structuredClone(DUMMY_PETS[0])],
+        bench: [structuredClone(DUMMY_PETS[1])],
+    };
+    game.inventory = { ...STARTER_INVENTORY };
 
     // 카메라 + 필드 초기화
     game.camera = new Camera();

@@ -66,17 +66,15 @@
                     </div>
                 </div>
 
-                <!-- 전투 씬 안내 오버레이 (Phase 1: 빈 전투 화면 placeholder) -->
-                <div id="battle-hint" class="hidden absolute inset-x-0 bottom-4 flex flex-col items-center z-20 pointer-events-none">
-                    <div class="glass-panel rounded-2xl px-5 py-3 text-center pointer-events-auto">
-                        <p class="text-xs text-slate-300 mb-2">
-                            ⚔️ <b class="text-emerald-300">턴제 전투 씬</b> — 전투 시스템은 <b>Phase 2</b>에서 구현됩니다.
-                        </p>
-                        <button id="battle-return-btn"
-                            class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-5 py-2 rounded-lg transition-transform active:scale-95">
-                            오버월드로 돌아가기 (아무 키)
-                        </button>
-                    </div>
+                <!-- 턴제 전투 UI 오버레이 (Phase 2) -->
+                <div id="battle-ui" class="hidden absolute inset-0 z-20 pointer-events-none">
+                    <!-- 전투 로그 (상단) -->
+                    <div id="battle-log"
+                        class="absolute top-3 left-1/2 -translate-x-1/2 max-w-[90%] glass-panel rounded-xl px-4 py-2
+                               text-center text-xs md:text-sm font-bold text-slate-100 whitespace-nowrap overflow-hidden"></div>
+                    <!-- 커맨드 메뉴 (하단, JS가 동적 렌더) -->
+                    <div id="battle-menu"
+                        class="absolute bottom-3 left-1/2 -translate-x-1/2 w-[300px] max-w-[92%] glass-panel rounded-2xl p-2 pointer-events-auto"></div>
                 </div>
             </div>
 

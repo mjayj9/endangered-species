@@ -1,22 +1,24 @@
 // ============================================================
-// 전투 씬 (Phase 1: placeholder)
-//  - 몬스터 접촉 시 진입하는 "빈 전투 화면"만 구현한다.
-//  - 아무 키 / 버튼으로 오버월드에 복귀한다.
-//  - 실제 턴제 전투(커맨드/턴 순서/데미지)는 Phase 2에서 이 모듈을 확장한다.
+// 턴제 전투 씬 (Phase 2)
+//  - 파티(주인공 + 임시 펫) vs 필드 몬스터의 스피드 기반 턴제 전투.
+//  - 커맨드: 공격 / 스킬 / 아이템 / 방어 / 교체 / 도망.
+//  - 승리 → 경험치·골드 획득(임시), 패배 → 마을(시작 지점) 귀환 HP 1 부활.
+//  - 주인공만 직접 커맨드를 고르고, 펫/적은 자동 행동한다(Phase 4에서 펫 조작 확장 여지).
 // ============================================================
 
 import { game } from '../core/game.js';
 import { playSound } from '../core/audio.js';
 import { clearKeys } from '../core/input.js';
 import { applyReturnCooldown } from '../world/encounter.js';
-import { shadeColor } from '../render/primitives.js';
+import { drawStatBar } from '../render/primitives.js';
 
-let currentEnemy = null;
-let enterFlash = 0;       // 진입 순간 화이트 플래시(0~1)
-let startTime = 0;        // 입력 가드용
-const INPUT_GUARD_MS = 450;
+import { Combatant } from './Combatant.js';
+import { CLASS_SKILLS, SKILLS } from '../data/skills.js';
+import { ITEMS } from '../data/items.js';
+import { MONSTERS } from '../data/monsters.js';
 
-// 지역 테마별 전투 배경 색 (Phase 6에서 지역이 늘면 여기에 추가)
+import { basicAttack, useSkill, useItem, defend, tryFlee } from './battleCommands.js';
+
 const THEME_BG = {
     forest: ['#14532d', '#052e16'],
     desert: ['#b45309', '#78350f'],
@@ -24,102 +26,519 @@ const THEME_BG = {
     swamp: ['#581c87', '#2e1065'],
 };
 
-export function startBattle(enemy) {
-    currentEnemy = enemy;
-    game.pendingBattle = enemy;
-    game.scene = 'battle';
-    enterFlash = 1;
-    startTime = performance.now();
+let B = null; // 현재 전투 컨텍스트
 
+// ------------------------------------------------------------
+// 전투 시작
+// ------------------------------------------------------------
+export function startBattle(enemySprite) {
+    const hero = game.player;
+
+    // 아군: 주인공 + 활성 펫(임시). 벤치 펫은 교체 커맨드로 투입.
+    const heroC = new Combatant({
+        name: hero.name, emoji: hero.emoji, color: hero.color, side: 'ally', isPlayer: true,
+        maxHp: hero.maxHp, hp: hero.hp, maxMp: hero.maxMp, mp: hero.mp,
+        atk: hero.atk, def: hero.def, spd: hero.spd,
+        skillIds: CLASS_SKILLS[hero.heroKey] || [], ref: hero,
+    });
+
+    const activePets = game.party.active.map((p) => petToCombatant(p));
+    const benchPets = game.party.bench.map((p) => petToCombatant(p));
+
+    // 적: 접촉한 몬스터 + 확률적으로 1마리 추가(최대 3)
+    const enemies = [spriteToCombatant(enemySprite)];
+    if (Math.random() < 0.4) enemies.push(dataToCombatant(MONSTERS.sludge));
+
+    B = {
+        allies: [heroC, ...activePets],
+        bench: benchPets,
+        enemies,
+        order: [],
+        turnIdx: 0,
+        phase: 'intro',
+        current: null,
+        wait: 0,
+        flash: 1,
+        floaters: [],
+        log: '',
+        sourceEnemy: enemySprite,
+        outcome: null,
+
+        addFloater(c, text, color) {
+            this.floaters.push({ fx: c.fx, fy: c.fy - 0.05, text, color, timer: 55 });
+        },
+        msg(text) {
+            this.log = text;
+            const el = document.getElementById('battle-log');
+            if (el) el.innerText = text;
+        },
+    };
+
+    layoutSlots();
+    game.scene = 'battle';
     playSound('skill');
     clearKeys();
 
-    // 안내 오버레이 표시 + 복귀 버튼 연결
-    document.getElementById('battle-hint').classList.remove('hidden');
-    const btn = document.getElementById('battle-return-btn');
-    btn.onclick = tryEnd;
-
-    // 아무 키로 복귀 (입력 가드 경과 후)
-    window.addEventListener('keydown', tryEnd);
+    document.getElementById('battle-ui').classList.remove('hidden');
+    B.msg(`야생의 ${enemies.map((e) => e.name).join(', ')}이(가) 나타났다!`);
+    clearMenu();
 }
 
-function tryEnd() {
-    if (performance.now() - startTime < INPUT_GUARD_MS) return;
-    endBattle();
+function petToCombatant(p) {
+    return new Combatant({
+        name: p.name, emoji: p.emoji, color: p.color, side: 'ally', isPlayer: false,
+        maxHp: p.stats.maxHp, hp: p.stats.hp, maxMp: p.stats.maxMp, mp: p.stats.mp,
+        atk: p.stats.atk, def: p.stats.def, spd: p.stats.spd,
+        skillIds: [p.skill], ref: p,
+    });
 }
 
-function endBattle() {
-    window.removeEventListener('keydown', tryEnd);
-    document.getElementById('battle-hint').classList.add('hidden');
-    document.getElementById('battle-return-btn').onclick = null;
+function spriteToCombatant(sprite) {
+    const s = sprite.data.stats;
+    const c = new Combatant({
+        name: sprite.data.name, emoji: sprite.data.emoji, color: sprite.data.color, side: 'enemy',
+        maxHp: s.maxHp, hp: s.hp, atk: s.atk, def: s.def, spd: s.spd,
+    });
+    c.reward = { exp: sprite.data.exp || 0, gold: sprite.data.gold || 0 };
+    return c;
+}
 
-    applyReturnCooldown(currentEnemy);
-    currentEnemy = null;
-    game.pendingBattle = null;
+function dataToCombatant(data) {
+    const c = spriteToCombatant({ data });
+    return c;
+}
+
+// 아군/적 화면 슬롯 위치를 화면 비율(fx, fy)로 배치
+function layoutSlots() {
+    assign(B.allies, 0.24);
+    assign(B.enemies, 0.74);
+    function assign(list, fx) {
+        const n = list.length;
+        list.forEach((c, i) => {
+            c.fx = fx;
+            c.fy = n === 1 ? 0.5 : 0.34 + (0.32 / (n - 1)) * i;
+        });
+    }
+}
+
+// ------------------------------------------------------------
+// 업데이트 (프레임 루프)
+// ------------------------------------------------------------
+export function updateBattle() {
+    if (!B) return;
+
+    // 플래시/플로터는 항상 갱신
+    if (B.flash > 0) B.flash = Math.max(0, B.flash - 0.05);
+    B.floaters.forEach((f) => f.timer--);
+    B.floaters = B.floaters.filter((f) => f.timer > 0);
+
+    switch (B.phase) {
+        case 'intro':
+            if (B.flash <= 0) { B.wait = 40; B.phase = 'startRound'; }
+            break;
+        case 'startRound':
+            if (--B.wait <= 0) startRound();
+            break;
+        case 'autoTurn':
+            if (--B.wait <= 0) autoAct();
+            break;
+        case 'resolve':
+            if (--B.wait <= 0) advanceTurn();
+            break;
+        case 'result':
+            if (--B.wait <= 0) finishBattle();
+            break;
+        // 'command' / 'target': 플레이어 입력 대기(HTML 메뉴)
+    }
+}
+
+function startRound() {
+    // 스피드 내림차순 턴 순서
+    B.order = [...B.allies, ...B.enemies].filter((c) => c.alive).sort((a, b) => b.spd - a.spd);
+    B.turnIdx = 0;
+    nextTurn();
+}
+
+function nextTurn() {
+    // 종료 판정
+    if (!B.enemies.some((e) => e.alive)) return beginResult('victory');
+    if (!B.allies.some((a) => a.alive)) return beginResult('defeat');
+
+    if (B.turnIdx >= B.order.length) return startRound(); // 새 라운드
+
+    const actor = B.order[B.turnIdx];
+    if (!actor || !actor.alive) { B.turnIdx++; return nextTurn(); }
+
+    actor.defending = false; // 자신의 턴이 오면 지난 방어 태세 해제
+    B.current = actor;
+
+    if (actor.isPlayer) {
+        B.phase = 'command';
+        B.msg(`${actor.name}의 턴 — 커맨드를 선택하세요`);
+        renderRootMenu();
+    } else {
+        B.phase = 'autoTurn';
+        B.wait = 35;
+        clearMenu();
+    }
+}
+
+// 펫/적 자동 행동
+function autoAct() {
+    const actor = B.current;
+    if (actor.side === 'enemy') {
+        const targets = B.allies.filter((a) => a.alive);
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        playSound('hit');
+        B.msg(basicAttack(B, actor, target));
+    } else {
+        // 펫: 종 스킬(pet_bite)로 적 공격
+        const targets = B.enemies.filter((e) => e.alive);
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        const skill = SKILLS[actor.skillIds[0]] || null;
+        playSound('hit');
+        if (skill && actor.mp >= skill.mpCost) {
+            B.msg(useSkill(B, actor, skill, [target]));
+        } else {
+            B.msg(basicAttack(B, actor, target));
+        }
+    }
+    afterAction();
+}
+
+// 플레이어/자동 행동 후 공통 처리
+function afterAction() {
+    clearMenu(); // 남은 커맨드 버튼 제거 → 결과 대기 중 잘못된 클릭 방지
+    B.phase = 'resolve';
+    B.wait = 45;
+}
+
+function advanceTurn() {
+    B.turnIdx++;
+    nextTurn();
+}
+
+// ------------------------------------------------------------
+// 결과 처리
+// ------------------------------------------------------------
+function beginResult(outcome) {
+    B.outcome = outcome;
+    B.phase = 'result';
+    B.wait = 100;
+    clearMenu();
+
+    if (outcome === 'victory') {
+        playSound('correct');
+        const reward = B.enemies.reduce(
+            (acc, e) => ({ exp: acc.exp + (e.reward?.exp || 0), gold: acc.gold + (e.reward?.gold || 0) }),
+            { exp: 0, gold: 0 }
+        );
+        game.gold += reward.gold;
+        game.player.exp = (game.player.exp || 0) + reward.exp; // 레벨업은 Phase 3
+        B.msg(`승리! 경험치 +${reward.exp}, 골드 +${reward.gold}`);
+    } else {
+        playSound('wrong');
+        B.msg('파티가 쓰러졌다... 마을로 귀환합니다.');
+    }
+}
+
+function finishBattle() {
+    document.getElementById('battle-ui').classList.add('hidden');
+    clearMenu();
+
+    // 주인공 hp/mp 를 원본에 반영
+    const heroC = B.allies.find((a) => a.isPlayer);
+    if (heroC && game.player) {
+        game.player.hp = heroC.hp;
+        game.player.mp = heroC.mp;
+    }
+
+    if (B.outcome === 'victory' || B.outcome === 'flee') {
+        if (B.outcome === 'victory') {
+            // 처치한 몬스터를 필드에서 제거
+            game.monsters = game.monsters.filter((m) => m !== B.sourceEnemy);
+        } else {
+            applyReturnCooldown(B.sourceEnemy);
+        }
+    } else if (B.outcome === 'defeat') {
+        // 마을(시작 지점) 귀환 + HP 1 부활
+        game.player.hp = 1;
+        game.player.x = game.map.spawn.x;
+        game.player.y = game.map.spawn.y;
+        game.monsters.forEach((m) => applyReturnCooldown(m));
+    }
 
     playSound('jump');
     clearKeys();
     game.scene = 'overworld';
+    B = null;
 }
 
-export function updateBattle() {
-    if (enterFlash > 0) enterFlash = Math.max(0, enterFlash - 0.05);
+// ------------------------------------------------------------
+// 플레이어 커맨드 (HTML 메뉴에서 호출)
+// ------------------------------------------------------------
+const aliveEnemies = () => B.enemies.filter((e) => e.alive);
+const aliveAllies = () => B.allies.filter((a) => a.alive);
+
+function playerAttack() {
+    const enemies = aliveEnemies();
+    pickTarget(enemies, (t) => {
+        playSound('hit');
+        B.msg(basicAttack(B, B.current, t));
+        afterAction();
+    });
 }
 
+function playerSkill(skill) {
+    const actor = B.current;
+    if (actor.mp < skill.mpCost) { B.msg('MP가 부족합니다!'); return; }
+    playSound('skill');
+
+    if (skill.target === 'enemy') {
+        pickTarget(aliveEnemies(), (t) => { B.msg(useSkill(B, actor, skill, [t])); afterAction(); });
+    } else if (skill.target === 'enemyAll') {
+        B.msg(useSkill(B, actor, skill, aliveEnemies())); afterAction();
+    } else if (skill.target === 'allyOne') {
+        pickTarget(aliveAllies(), (t) => { B.msg(useSkill(B, actor, skill, [t])); afterAction(); });
+    } else if (skill.target === 'allyAll') {
+        B.msg(useSkill(B, actor, skill, aliveAllies())); afterAction();
+    } else { // self
+        B.msg(useSkill(B, actor, skill, [actor])); afterAction();
+    }
+}
+
+function playerItem(itemId) {
+    const item = ITEMS[itemId];
+    const targets = aliveAllies();
+    playSound('heal');
+    pickTarget(targets, (t) => { B.msg(useItem(B, B.current, itemId, t)); afterAction(); });
+}
+
+function playerDefend() {
+    playSound('jump');
+    B.msg(defend(B, B.current));
+    afterAction();
+}
+
+function playerSwap(benchIdx) {
+    // 현재 행동 주체(주인공)는 전장에 남고, 활성 펫 1명 ↔ 벤치 펫 교체
+    const activePetIdx = B.allies.findIndex((a) => !a.isPlayer && a.alive);
+    const incoming = B.bench[benchIdx];
+    playSound('jump');
+
+    if (activePetIdx === -1) {
+        // 활성 펫이 없으면 벤치 펫을 새로 투입
+        B.bench.splice(benchIdx, 1);
+        B.allies.push(incoming);
+    } else {
+        const outgoing = B.allies[activePetIdx];
+        B.allies[activePetIdx] = incoming;
+        B.bench[benchIdx] = outgoing;
+    }
+    layoutSlots();
+    B.msg(`${incoming.name}(으)로 교체!`);
+    afterAction();
+}
+
+function playerFlee() {
+    if (tryFlee()) {
+        B.outcome = 'flee';
+        B.msg('무사히 도망쳤다!');
+        B.phase = 'result';
+        B.wait = 50;
+        clearMenu();
+    } else {
+        B.msg('도망치지 못했다!');
+        afterAction(); // 턴 소모
+    }
+}
+
+// ------------------------------------------------------------
+// 커맨드 메뉴 UI (HTML)
+// ------------------------------------------------------------
+function menuEl() { return document.getElementById('battle-menu'); }
+function clearMenu() { const m = menuEl(); if (m) m.innerHTML = ''; }
+
+function makeBtn(label, onClick, disabled = false) {
+    const b = document.createElement('button');
+    b.className =
+        'px-3 py-2 rounded-lg text-xs font-extrabold transition-transform active:scale-95 ' +
+        (disabled
+            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            : 'bg-slate-800 hover:bg-emerald-600 text-white');
+    b.innerText = label;
+    b.disabled = disabled;
+    if (!disabled) b.onclick = onClick;
+    return b;
+}
+
+function renderRootMenu() {
+    const m = menuEl();
+    m.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-3 gap-1.5';
+
+    grid.appendChild(makeBtn('⚔️ 공격', playerAttack));
+    grid.appendChild(makeBtn('✨ 스킬', renderSkillMenu, B.current.skills.length === 0));
+    grid.appendChild(makeBtn('🧪 아이템', renderItemMenu, !hasAnyItem()));
+    grid.appendChild(makeBtn('🛡️ 방어', playerDefend));
+    grid.appendChild(makeBtn('🔄 교체', renderSwapMenu, B.bench.length === 0));
+    grid.appendChild(makeBtn('🏃 도망', playerFlee));
+    m.appendChild(grid);
+}
+
+function renderSkillMenu() {
+    const m = menuEl();
+    m.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'flex flex-col gap-1.5';
+    B.current.skills.forEach((sk) => {
+        const disabled = B.current.mp < sk.mpCost;
+        list.appendChild(makeBtn(`${sk.name}  (MP ${sk.mpCost})`, () => playerSkill(sk), disabled));
+    });
+    list.appendChild(makeBtn('◀ 뒤로', renderRootMenu));
+    m.appendChild(list);
+}
+
+function renderItemMenu() {
+    const m = menuEl();
+    m.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'flex flex-col gap-1.5';
+    Object.keys(ITEMS).forEach((id) => {
+        const count = game.inventory[id] || 0;
+        list.appendChild(makeBtn(`${ITEMS[id].emoji} ${ITEMS[id].name}  x${count}`, () => playerItem(id), count <= 0));
+    });
+    list.appendChild(makeBtn('◀ 뒤로', renderRootMenu));
+    m.appendChild(list);
+}
+
+function renderSwapMenu() {
+    const m = menuEl();
+    m.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'flex flex-col gap-1.5';
+    B.bench.forEach((p, i) => {
+        list.appendChild(makeBtn(`${p.emoji} ${p.name} 투입`, () => playerSwap(i)));
+    });
+    list.appendChild(makeBtn('◀ 뒤로', renderRootMenu));
+    m.appendChild(list);
+}
+
+// 대상 선택: 후보가 1명이면 자동, 여러 명이면 버튼 목록
+function pickTarget(candidates, onPick) {
+    if (candidates.length === 1) return onPick(candidates[0]);
+    B.phase = 'target';
+    const m = menuEl();
+    m.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'flex flex-col gap-1.5';
+    B.msg('대상을 선택하세요');
+    candidates.forEach((c) => {
+        list.appendChild(makeBtn(`🎯 ${c.name}  (HP ${Math.round(c.hp)})`, () => { B.phase = 'command'; onPick(c); }));
+    });
+    list.appendChild(makeBtn('◀ 취소', () => { B.phase = 'command'; renderRootMenu(); }));
+    m.appendChild(list);
+}
+
+function hasAnyItem() {
+    return Object.keys(ITEMS).some((id) => (game.inventory[id] || 0) > 0);
+}
+
+// ------------------------------------------------------------
+// 렌더링
+// ------------------------------------------------------------
 export function renderBattle(ctx) {
+    if (!B) return;
     const w = game.canvas.width, h = game.canvas.height;
     const theme = game.map?.theme || 'forest';
     const [c1, c2] = THEME_BG[theme] || THEME_BG.forest;
 
-    // 지역 테마 그라데이션 배경
+    // 지역 테마 배경
     const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, c1);
-    bg.addColorStop(1, c2);
+    bg.addColorStop(0, c1); bg.addColorStop(1, c2);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(0, h * 0.7, w, h * 0.3);
 
-    // 바닥 단
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(0, h * 0.72, w, h * 0.28);
+    drawGroup(ctx, B.allies, w, h, true);
+    drawGroup(ctx, B.enemies, w, h, false);
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // 아군(주인공) — 좌하단
-    const hero = game.player;
-    if (hero) {
-        ctx.font = '64px sans-serif';
-        ctx.fillText(hero.emoji, w * 0.28, h * 0.62);
-        ctx.fillStyle = hero.color;
-        ctx.font = "bold 14px 'Nanum Gothic'";
-        ctx.fillText(hero.name, w * 0.28, h * 0.78);
+    // 현재 턴 표시 화살표
+    if (B.current && B.current.alive && (B.phase === 'command' || B.phase === 'target')) {
+        const px = B.current.fx * w, py = B.current.fy * h;
+        ctx.fillStyle = '#facc15';
+        ctx.font = "bold 18px 'Jua', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('▼', px, py - 52 + Math.sin(Date.now() * 0.008) * 3);
     }
 
-    // 적 — 우상단
-    if (currentEnemy) {
-        ctx.font = '64px sans-serif';
-        ctx.fillText(currentEnemy.emoji, w * 0.72, h * 0.4);
-        ctx.fillStyle = '#fca5a5';
-        ctx.font = "bold 14px 'Nanum Gothic'";
-        ctx.fillText(currentEnemy.name, w * 0.72, h * 0.56);
-    }
-
-    // VS
-    ctx.fillStyle = '#facc15';
-    ctx.font = "900 40px 'Jua', sans-serif";
-    ctx.fillText('VS', w * 0.5, h * 0.46);
-
-    // 안내 문구
-    ctx.fillStyle = shadeColor('#e2e8f0', 0);
-    ctx.font = "bold 15px 'Jua', sans-serif";
-    ctx.fillText('턴제 전투 씬 (Phase 2 예정)', w * 0.5, h * 0.16);
+    // 데미지/회복 플로터
+    B.floaters.forEach((f) => {
+        const px = f.fx * w, py = f.fy * h - (55 - f.timer) * 0.6;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, f.timer / 30);
+        ctx.fillStyle = f.color;
+        ctx.font = "900 18px 'Jua', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText(f.text, px, py);
+        ctx.restore();
+    });
 
     ctx.textAlign = 'start';
     ctx.textBaseline = 'alphabetic';
 
     // 진입 플래시
-    if (enterFlash > 0) {
-        ctx.fillStyle = `rgba(255,255,255,${enterFlash})`;
+    if (B.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${B.flash})`;
         ctx.fillRect(0, 0, w, h);
     }
+}
+
+function drawGroup(ctx, list, w, h, isAlly) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    list.forEach((c) => {
+        const px = c.fx * w, py = c.fy * h;
+        ctx.save();
+        if (!c.alive) ctx.globalAlpha = 0.3;
+
+        // 그림자
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(px, py + 30, 28, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 방어 태세 표시
+        if (c.defending && c.alive) {
+            ctx.strokeStyle = 'rgba(56,189,248,0.8)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(px, py, 34, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // 캐릭터 이모지
+        ctx.font = '48px sans-serif';
+        ctx.fillText(c.emoji, px, py);
+
+        // 이름
+        ctx.fillStyle = isAlly ? c.color : '#fecaca';
+        ctx.font = "bold 12px 'Nanum Gothic'";
+        ctx.fillText(c.name, px, py + 44);
+        ctx.restore();
+
+        // HP (아군은 MP까지)
+        drawStatBar(ctx, px - 32, py - 44, 64, 6, c.hp / c.maxHp, '#ef4444');
+        if (isAlly && c.maxMp > 0) {
+            drawStatBar(ctx, px - 32, py - 36, 64, 4, c.mp / c.maxMp, '#38bdf8');
+        }
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = "bold 9px 'Nanum Gothic'";
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.max(0, Math.round(c.hp))}/${c.maxHp}`, px, py - 48);
+    });
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
 }
