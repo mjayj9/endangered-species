@@ -13,13 +13,13 @@ import { applyReturnCooldown } from '../world/encounter.js';
 import { drawStatBar } from '../render/primitives.js';
 
 import { Combatant } from './Combatant.js';
-import { CLASS_SKILLS, SKILLS } from '../data/skills.js';
 import { ITEMS } from '../data/items.js';
 import { MONSTERS } from '../data/monsters.js';
 
 import { basicAttack, useSkill, useItem, defend, tryFlee } from './battleCommands.js';
 import { effectiveStats, addItem } from '../systems/inventory.js';
 import { gainHeroExp, gainPetExp } from '../systems/leveling.js';
+import { learnedActiveSkillIds } from '../systems/skillTree.js';
 
 const THEME_BG = {
     forest: ['#14532d', '#052e16'],
@@ -42,11 +42,12 @@ export function startBattle(enemySprite) {
         name: hero.name, emoji: hero.emoji, color: hero.color, side: 'ally', isPlayer: true,
         maxHp: eff.maxHp, hp: Math.min(hero.hp, eff.maxHp), maxMp: eff.maxMp, mp: Math.min(hero.mp, eff.maxMp),
         atk: eff.atk, def: eff.def, spd: eff.spd,
-        skillIds: CLASS_SKILLS[hero.heroKey] || [], ref: hero,
+        skillIds: learnedActiveSkillIds(hero), ref: hero,
     });
 
-    const activePets = game.party.active.map((p) => petToCombatant(p));
-    const benchPets = game.party.bench.map((p) => petToCombatant(p));
+    // 출전 펫(active) → 아군, 대기 펫 → 교체 후보
+    const activePets = game.pets.filter((p) => p.active).map((p) => petToCombatant(p));
+    const benchPets = game.pets.filter((p) => !p.active).map((p) => petToCombatant(p));
 
     // 적: 접촉한 몬스터 + 확률적으로 1마리 추가(최대 3)
     const enemies = [spriteToCombatant(enemySprite)];
@@ -92,7 +93,7 @@ function petToCombatant(p) {
         name: p.name, emoji: p.emoji, color: p.color, side: 'ally', isPlayer: false,
         maxHp: p.stats.maxHp, hp: p.stats.hp, maxMp: p.stats.maxMp, mp: p.stats.mp,
         atk: p.stats.atk, def: p.stats.def, spd: p.stats.spd,
-        skillIds: [p.skill], ref: p,
+        skillIds: [...p.skills], ref: p,
     });
 }
 
@@ -196,18 +197,35 @@ function autoAct() {
         playSound('hit');
         B.msg(basicAttack(B, actor, target));
     } else {
-        // 펫: 종 스킬(pet_bite)로 적 공격
-        const targets = B.enemies.filter((e) => e.alive);
-        const target = targets[Math.floor(Math.random() * targets.length)];
-        const skill = SKILLS[actor.skillIds[0]] || null;
-        playSound('hit');
-        if (skill && actor.mp >= skill.mpCost) {
-            B.msg(useSkill(B, actor, skill, [target]));
-        } else {
-            B.msg(basicAttack(B, actor, target));
-        }
+        // 펫: 보유 스킬 중 하나를 상황에 맞게 사용
+        petAutoAct(actor);
     }
     afterAction();
+}
+
+// 펫 AI: 힐 스킬은 다친 아군이 있을 때만, 그 외엔 공격 스킬 사용
+function petAutoAct(actor) {
+    const aliveA = B.allies.filter((a) => a.alive);
+    const aliveE = B.enemies.filter((e) => e.alive);
+    const hurt = aliveA.filter((a) => a.hp < a.maxHp * 0.6).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+
+    const skills = actor.skills;
+    const healSkills = skills.filter((s) => s.type === 'heal');
+    const atkSkills = skills.filter((s) => s.type !== 'heal');
+
+    playSound('hit');
+    // 다친 아군이 있고 힐 스킬 보유 → 힐
+    if (hurt.length && healSkills.length) {
+        const sk = healSkills[0];
+        const targets = sk.target === 'allyAll' ? aliveA : [hurt[0]];
+        B.msg(useSkill(B, actor, sk, targets));
+        return;
+    }
+    // 공격 스킬 무작위 사용
+    const sk = atkSkills[Math.floor(Math.random() * atkSkills.length)];
+    if (!sk) { B.msg(basicAttack(B, actor, aliveE[Math.floor(Math.random() * aliveE.length)])); return; }
+    const targets = sk.target === 'enemyAll' ? aliveE : [aliveE[Math.floor(Math.random() * aliveE.length)]];
+    B.msg(useSkill(B, actor, sk, targets));
 }
 
 // 플레이어/자동 행동 후 공통 처리

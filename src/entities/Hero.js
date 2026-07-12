@@ -30,7 +30,10 @@ export class Hero {
         // 성장(레벨업/경험치/스킬포인트). maxHp/atk 등은 레벨업 시 성장 곡선으로 상승.
         this.exp = 0;
         this.level = 1;
-        this.sp = 0; // 스킬 포인트(획득만; 소비는 Phase 4)
+        this.sp = 0; // 스킬 포인트(스킬트리 노드 습득에 소비)
+
+        // 습득한 스킬트리 노드 id (액티브=전투 커맨드, 패시브=상시 보너스)
+        this.learnedSkills = [];
     }
 
     // keys: core/input 의 keys, map: 현재 맵 데이터

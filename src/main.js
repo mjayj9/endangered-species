@@ -11,8 +11,9 @@ import { playSound } from './core/audio.js';
 
 import { CLASSES } from './data/classes.js';
 import { MAPS, START_MAP } from './data/maps.js';
-import { createPet, STARTER_ACTIVE_PETS, STARTER_BENCH_PETS } from './data/pets.js';
+import { createPet, STARTER_PETS } from './data/pets.js';
 import { STARTER_INVENTORY, STARTER_EQUIPMENT } from './data/items.js';
+import { grantRootSkill } from './systems/skillTree.js';
 
 import { Hero } from './entities/Hero.js';
 import { Camera } from './world/camera.js';
@@ -46,19 +47,21 @@ function selectCharacter(key) {
     game.heroKey = key;
     playSound('correct');
 
-    // 주인공 생성
+    // 주인공 생성 + 루트 스킬 자동 습득
     game.player = new Hero(CLASSES[key]);
+    grantRootSkill(game.player);
 
     // 시작 맵 로드
     game.map = MAPS[START_MAP];
     game.player.x = game.map.spawn.x;
     game.player.y = game.map.spawn.y;
 
-    // 파티 초기화 (레벨/경험치를 가진 펫 인스턴스)
-    game.party = {
-        active: STARTER_ACTIVE_PETS.map(createPet),
-        bench: STARTER_BENCH_PETS.map(createPet),
-    };
+    // 보유 펫 초기화 (레벨/경험치/스킬을 가진 펫 인스턴스)
+    game.pets = STARTER_PETS.map((sp) => {
+        const p = createPet(sp.id);
+        p.active = sp.active;
+        return p;
+    });
 
     // 인벤토리/장비 초기화
     game.inventory = { ...STARTER_INVENTORY };

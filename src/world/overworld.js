@@ -8,6 +8,7 @@ import { game } from '../core/game.js';
 import { Enemy } from '../entities/Enemy.js';
 import { Npc } from '../entities/Npc.js';
 import { Chest } from '../entities/Chest.js';
+import { Trap } from '../entities/Trap.js';
 import { MONSTERS } from '../data/monsters.js';
 import { drawPrettyTree2D } from '../render/primitives.js';
 import { checkEncounters } from './encounter.js';
@@ -16,6 +17,7 @@ import { keys } from '../core/input.js';
 let grassSpeckles = [];
 let npcs = [];
 let chests = [];
+let traps = [];
 
 // 현재 맵 기준으로 필드 초기화 (잔디 얼룩 패턴 + 몬스터/NPC/상자 배치)
 export function initOverworld() {
@@ -39,9 +41,10 @@ export function initOverworld() {
         return new Enemy(data, sp.x, sp.y);
     });
 
-    // NPC / 보물상자 스폰
+    // NPC / 보물상자 / 구조 덫 스폰
     npcs = (map.npcs || []).map((d) => new Npc(d));
     chests = (map.chests || []).map((d) => new Chest(d));
+    traps = (map.traps || []).map((d) => new Trap(d));
 }
 
 export function updateOverworld() {
@@ -68,11 +71,11 @@ export function updateOverworld() {
     checkEncounters();
 }
 
-// 상호작용 범위 안에서 가장 가까운 NPC/상자 반환
+// 상호작용 범위 안에서 가장 가까운 NPC/상자/덫 반환
 function nearestInteractable(player) {
     let best = null, bestDist = Infinity;
-    for (const o of [...npcs, ...chests]) {
-        if (o.opened) continue; // 이미 연 상자
+    for (const o of [...npcs, ...chests, ...traps]) {
+        if (o.opened) continue; // 이미 연 상자 / 구출한 덫
         const d = Math.hypot(player.x - o.x, player.y - o.y);
         if (d < o.interactRange && d < bestDist) { best = o; bestDist = d; }
     }
@@ -99,9 +102,10 @@ export function renderOverworld(ctx) {
 
     drawDeco(ctx, camX, camY);
 
-    // NPC / 상자 → 몬스터 → 플레이어 순으로 그려 겹침 자연스럽게
+    // NPC / 상자 / 덫 → 몬스터 → 플레이어 순으로 그려 겹침 자연스럽게
     npcs.forEach((n) => n.draw(ctx, camera, game.player));
     chests.forEach((c) => c.draw(ctx, camera, game.player));
+    traps.forEach((t) => t.draw(ctx, camera, game.player));
     game.monsters.forEach((m) => m.draw(ctx, camera));
     game.player.draw(ctx, camera);
 }

@@ -7,6 +7,7 @@
 
 import { game } from '../core/game.js';
 import { ITEMS } from '../data/items.js';
+import { passiveBonus } from './skillTree.js';
 
 const SLOTS = ['weapon', 'armor', 'accessory'];
 
@@ -23,15 +24,16 @@ export function equipBonus() {
     return b;
 }
 
-// 주인공 최종 스탯 (기본 성장치 + 장비 보너스)
+// 주인공 최종 스탯 (기본 성장치 + 장비 보너스 + 패시브 스킬 보너스)
 export function effectiveStats(hero) {
     const b = equipBonus();
+    const p = passiveBonus(hero);
     return {
-        maxHp: hero.maxHp + b.hp,
-        maxMp: hero.maxMp + b.mp,
-        atk: hero.atk + b.atk,
-        def: hero.def + b.def,
-        spd: hero.spd + b.spd,
+        maxHp: hero.maxHp + b.hp + p.maxHp,
+        maxMp: hero.maxMp + b.mp + p.maxMp,
+        atk: hero.atk + b.atk + p.atk,
+        def: hero.def + b.def + p.def,
+        spd: hero.spd + b.spd + p.spd,
     };
 }
 

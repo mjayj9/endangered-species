@@ -55,6 +55,12 @@ export const MAPS = {
             { x: 900, y: 200, gold: 40, loot: [{ itemId: 'hi_potion', chance: 0.6 }, { itemId: 'iron_sword', chance: 0.25 }] },
             { x: 1500, y: 900, gold: 60, loot: [{ itemId: 'bark_mail', chance: 0.5 }, { itemId: 'spirit_ring', chance: 0.12 }] },
         ],
+
+        // 구조 덫 배치 (E로 갇힌 동물을 구출해 펫으로 합류)
+        traps: [
+            { animalId: 'eagle', x: 1350, y: 250, desc: '그물에 뒤엉킨 독수리가 날개를 다쳤습니다.' },
+            { animalId: 'stork', x: 620, y: 950, desc: '오염된 늪가에서 황새가 지쳐 쓰러져 있습니다.' },
+        ],
     },
 };
 
