@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>에코 가디언즈 RPG</title>
+    <!-- Tailwind CSS CDN (기존 프로젝트와 스타일 일관성 유지) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-3">
+
+    <!-- ================= 게임 컨테이너 ================= -->
+    <div class="w-full max-w-5xl">
+        <div class="bg-slate-900 rounded-3xl p-4 border-4 border-emerald-500/80 shadow-2xl relative">
+
+            <!-- 상단 타이틀 + 실시간 HUD 대시보드 -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 px-2 gap-2">
+                <div class="flex items-center space-x-2">
+                    <span class="bg-emerald-500 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-md">RPG · PHASE 1</span>
+                    <h3 class="text-sm md:text-base font-extrabold text-emerald-300">
+                        <i class="fa-solid fa-leaf mr-1.5"></i>에코 가디언즈: 멸종위기 수호 연대기
+                    </h3>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
+                    <div class="flex items-center gap-1.5 bg-amber-900/30 border border-amber-500/30 px-2 py-1 rounded-lg">
+                        <i class="fa-solid fa-coins text-yellow-400"></i>
+                        <span id="ui-gold" class="font-black text-yellow-300 text-sm leading-none">0</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 bg-red-900/25 border border-red-500/30 px-2 py-1 rounded-lg">
+                        <i class="fa-solid fa-heart text-red-400"></i>
+                        <div class="flex flex-col justify-center gap-0.5">
+                            <span id="ui-hp" class="font-black text-red-300 text-[11px] leading-none">100/100</span>
+                            <div class="w-16 h-1 bg-slate-800 rounded-full overflow-hidden">
+                                <div id="ui-hp-bar" class="h-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-200" style="width:100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 bg-sky-900/25 border border-sky-500/30 px-2 py-1 rounded-lg">
+                        <i class="fa-solid fa-location-dot text-sky-400"></i>
+                        <span id="ui-zone" class="font-black text-sky-300 text-[11px] leading-none">에메랄드 숲</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2D 게임 뷰포트 -->
+            <div id="game-viewport" class="relative w-full aspect-[16/9] bg-[#86efac] rounded-2xl overflow-hidden border-2 border-slate-700 shadow-inner">
+
+                <!-- 메인 게임 캔버스 -->
+                <div id="canvas-container" class="w-full h-full relative">
+                    <canvas id="gameCanvas" width="960" height="540" class="w-full h-full block"></canvas>
+                </div>
+
+                <!-- 캐릭터 선택 오버레이 -->
+                <div id="char-select-screen" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 z-20">
+                    <h2 class="text-2xl md:text-3xl text-center text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-sky-300 to-teal-400 font-extrabold mb-1 tracking-wide drop-shadow-md">
+                        수호 영웅을 선택하세요!
+                    </h2>
+                    <p class="text-slate-400 text-xs mb-6 text-center max-w-md">
+                        선택한 영웅이 주인공 직업이 됩니다. (WASD 이동 · E 상호작용)
+                    </p>
+                    <div id="char-select-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl w-full px-4">
+                        <!-- 카드들은 src/ui/charSelect.js 가 data/classes.js 를 읽어 렌더링 -->
+                    </div>
+                </div>
+
+                <!-- 전투 씬 안내 오버레이 (Phase 1: 빈 전투 화면 placeholder) -->
+                <div id="battle-hint" class="hidden absolute inset-x-0 bottom-4 flex flex-col items-center z-20 pointer-events-none">
+                    <div class="glass-panel rounded-2xl px-5 py-3 text-center pointer-events-auto">
+                        <p class="text-xs text-slate-300 mb-2">
+                            ⚔️ <b class="text-emerald-300">턴제 전투 씬</b> — 전투 시스템은 <b>Phase 2</b>에서 구현됩니다.
+                        </p>
+                        <button id="battle-return-btn"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-5 py-2 rounded-lg transition-transform active:scale-95">
+                            오버월드로 돌아가기 (아무 키)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 조작 가이드 -->
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-center text-[11px] text-slate-400">
+                <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">W A S D</span> 사방 이동
+                </div>
+                <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">몬스터 접촉</span> 전투 씬 진입
+                </div>
+                <div class="bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span class="bg-slate-800 text-white rounded px-1.5 py-0.5 font-bold mr-1">E</span> 상호작용 (다음 Phase)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ES Module 진입점 -->
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
