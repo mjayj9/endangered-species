@@ -21,6 +21,7 @@ import { effectiveStats, addItem } from '../systems/inventory.js';
 import { gainHeroExp, gainPetExp } from '../systems/leveling.js';
 import { learnedActiveSkillIds } from '../systems/skillTree.js';
 import { recordKill } from '../systems/quests.js';
+import { saveGame } from '../core/saveSystem.js';
 import { attachFx, initCombatantFx, updateFx, skipFx, spawnBanner, drawProjectiles, drawParticles } from './battleFx.js';
 
 // 원거리(투사체) 직업/펫 여부 — 근접(leo/taro)은 lunge, 원거리(aria/lumi/펫)는 투사체
@@ -346,6 +347,9 @@ function finishBattle() {
     clearKeys();
     game.scene = 'overworld';
     B = null;
+
+    // 전투 종료(레벨업/보상 반영 후) 자동저장
+    saveGame();
 }
 
 // ------------------------------------------------------------

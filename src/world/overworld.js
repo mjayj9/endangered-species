@@ -14,6 +14,7 @@ import { drawPrettyTree2D } from '../render/primitives.js';
 import { checkEncounters } from './encounter.js';
 import { keys } from '../core/input.js';
 import { transition } from '../render/transition.js';
+import { saveGame } from '../core/saveSystem.js';
 
 let grassSpeckles = [];
 let npcs = [];
@@ -59,6 +60,11 @@ export function updateOverworld() {
 
     game.monsters.forEach((m) => m.update());
     updateFollowers();
+
+    // 마을(시작 지점 부근) 진입 시 자동저장
+    const nearVillage = Math.hypot(player.x - map.spawn.x, player.y - map.spawn.y) < 220;
+    if (nearVillage && !game._inVillage) { game._inVillage = true; saveGame(); }
+    else if (!nearVillage && game._inVillage) { game._inVillage = false; }
 
     // E 상호작용: 가장 가까운 NPC/상자 (범위 내) 발동
     if (keys.e) {

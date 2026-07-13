@@ -10,6 +10,7 @@ import { QUESTS } from '../data/quests.js';
 import { ITEMS } from '../data/items.js';
 import { addItem } from './inventory.js';
 import { gainHeroExp } from './leveling.js';
+import { saveGame } from '../core/saveSystem.js';
 
 export function questState(id) { return game.quests[id] || 'inactive'; }
 
@@ -57,6 +58,8 @@ export function completeQuest(id) {
     if (r.gold) game.gold += r.gold;
     if (r.exp) gainHeroExp(game.player, r.exp);
     if (r.item) addItem(r.item, 1);
+
+    saveGame(); // 퀘스트 완료 시 저장
 }
 
 function rewardText(id) {

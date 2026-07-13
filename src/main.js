@@ -28,6 +28,7 @@ import { closeShop } from './ui/shop.js';
 import { updateTransition, renderTransition } from './render/transition.js';
 import { startDialogue } from './ui/dialogue.js';
 import { registerAnimal } from './systems/encyclopedia.js';
+import { hasSave, readSave, saveGame, saveSummary, startAutosave } from './core/saveSystem.js';
 
 // --- 캔버스 셋업 ---
 function setupCanvas() {
@@ -84,8 +85,84 @@ function selectCharacter(key) {
     document.getElementById('char-select-screen').classList.add('hidden');
     game.scene = 'overworld';
 
+    // 새 게임 시작 상태를 즉시 저장 + 자동저장 가동
+    saveGame();
+    startAutosave();
+
     // 오프닝 대화(여행을 떠나는 동기 설명) 자동 재생
     startDialogue('intro');
+}
+
+// --- 저장 데이터 불러오기(이어하기) ---
+function loadGame() {
+    const d = readSave();
+    if (!d) return false;
+
+    game.heroKey = d.heroKey;
+    const hero = new Hero(CLASSES[d.heroKey] || CLASSES.leo);
+    const ps = d.player || {};
+    Object.assign(hero, {
+        level: ps.level ?? 1, exp: ps.exp ?? 0, sp: ps.sp ?? 0,
+        hp: ps.hp, mp: ps.mp, maxHp: ps.maxHp, maxMp: ps.maxMp,
+        atk: ps.atk, def: ps.def, spd: ps.spd,
+        x: ps.x, y: ps.y, facingDir: ps.facingDir || 'down',
+        learnedSkills: [...(ps.learnedSkills || [])],
+    });
+    game.player = hero;
+
+    game.map = MAPS[d.mapId] || MAPS[START_MAP];
+    if (hero.x == null) { hero.x = game.map.spawn.x; hero.y = game.map.spawn.y; }
+
+    game.gold = d.gold || 0;
+    game.inventory = { ...(d.inventory || {}) };
+    game.bag = [...(d.bag || [])];
+    game.equipped = { weapon: null, armor: null, accessory: null, ...(d.equipped || {}) };
+
+    game.pets = (d.pets || []).map((sp) => {
+        const p = createPet(sp.id);
+        p.level = sp.level ?? 1; p.exp = sp.exp ?? 0; p.active = !!sp.active;
+        if (sp.stats) p.stats = { ...sp.stats };
+        if (sp.skills) p.skills = [...sp.skills];
+        return p;
+    });
+
+    game.quests = { ...(d.quests || {}) };
+    game.questProgress = { ...(d.questProgress || {}) };
+    game.flags = { ...(d.flags || {}) };
+    game.encyclopedia = [...(d.encyclopedia || [])];
+    game.overlay = 'none';
+
+    game.camera = new Camera();
+    initOverworld();
+
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('char-select-screen').classList.add('hidden');
+    game.scene = 'overworld';
+    startAutosave();
+    return true;
+}
+
+// --- 타이틀 화면 (새 게임 / 이어하기) ---
+function initTitle() {
+    const contBtn = document.getElementById('btn-continue');
+    const contInfo = document.getElementById('continue-info');
+    const newBtn = document.getElementById('btn-newgame');
+
+    if (hasSave()) {
+        const s = saveSummary();
+        const heroName = (CLASSES[s?.heroKey]?.name) || '수호자';
+        contBtn.style.display = '';
+        contInfo.style.display = '';
+        contInfo.innerText = `${heroName} · Lv.${s?.level ?? 1}`;
+    }
+
+    contBtn.addEventListener('click', () => { playSound('correct'); loadGame(); });
+    newBtn.addEventListener('click', () => {
+        if (hasSave() && !window.confirm('기존 저장 데이터가 있습니다. 새 게임을 시작하면 진행 중인 데이터를 덮어쓰게 됩니다. 계속할까요?')) return;
+        playSound('jump');
+        document.getElementById('title-screen').classList.add('hidden');
+        document.getElementById('char-select-screen').classList.remove('hidden');
+    });
 }
 
 // --- 메인 루프 ---
@@ -149,6 +226,7 @@ function boot() {
     initInput(() => game.scene);
     initOverlayControls();
     renderCharSelect(selectCharacter);
+    initTitle();
     gameLoop();
 }
 
