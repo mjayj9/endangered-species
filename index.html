@@ -61,8 +61,22 @@
                     <canvas id="gameCanvas" width="960" height="540" class="w-full h-full block"></canvas>
                 </div>
 
+                <!-- 타이틀 화면 (새 게임 / 이어하기) -->
+                <div id="title-screen" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 z-30">
+                    <div class="text-5xl mb-2">🌿🐯🛡️</div>
+                    <h1 class="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-lime-300 to-teal-300 fancy-title mb-1 drop-shadow">
+                        에코 가디언즈
+                    </h1>
+                    <p class="text-slate-400 text-xs mb-6 text-center">멸종위기 수호 연대기</p>
+                    <div class="flex flex-col gap-2.5 w-56">
+                        <button id="btn-continue" class="rpg-btn" style="display:none">▶ 이어하기</button>
+                        <div id="continue-info" class="text-[11px] text-emerald-300 text-center -mt-1 mb-1" style="display:none"></div>
+                        <button id="btn-newgame" class="rpg-btn">✦ 새 게임</button>
+                    </div>
+                </div>
+
                 <!-- 캐릭터 선택 오버레이 -->
-                <div id="char-select-screen" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 z-20">
+                <div id="char-select-screen" class="hidden absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 z-20">
                     <h2 class="text-2xl md:text-3xl text-center text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-sky-300 to-teal-400 font-extrabold mb-1 tracking-wide drop-shadow-md">
                         수호 영웅을 선택하세요!
                     </h2>
@@ -104,6 +118,21 @@
                     </div>
                     <div id="shop-flash" class="text-[11px] text-emerald-300 mb-2 min-h-[14px]"></div>
                     <div id="shop-body" class="flex-1"></div>
+                </div>
+
+                <!-- 대화창 (하단 고정, 초상화 + 타이핑 + 선택지) -->
+                <div id="dialogue-box" class="hidden absolute inset-x-0 bottom-0 z-40 p-3 cursor-pointer select-none">
+                    <div class="dlg-frame">
+                        <div class="flex items-stretch gap-3">
+                            <div id="dlg-portrait" class="dlg-portrait">💬</div>
+                            <div class="flex-1 min-w-0">
+                                <div id="dlg-speaker" class="dlg-speaker">이름</div>
+                                <div id="dlg-text" class="dlg-text"></div>
+                                <div id="dlg-choices" class="dlg-choices"></div>
+                                <div id="dlg-hint" class="dlg-hint hidden">▶ 스페이스 / 클릭으로 계속</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

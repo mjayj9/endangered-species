@@ -28,9 +28,10 @@ export const game = {
     // 자원(재화) — Phase 3에서 상점/전투 보상과 연동
     gold: 0,
 
-    // 파티 편성: 전투 출전(active, 주인공 제외 펫) / 대기(bench)
-    //  - Phase 2에서는 교체 커맨드 시험용 더미 펫이 들어간다(Phase 4에서 실제 구현).
-    party: { active: [], bench: [] },
+    // 보유 펫 전체(각 인스턴스의 active 플래그로 전투 출전 여부 지정).
+    //  - 출전 펫 = pets.filter(p => p.active) (최대 2, 주인공 포함 3).
+    //  - '동물 보호소' 파티 편성 UI에서 관리한다.
+    pets: [],
 
     // 소비 아이템 인벤토리 { itemId: 개수 }
     inventory: {},
@@ -39,8 +40,17 @@ export const game = {
     bag: [],
     equipped: { weapon: null, armor: null, accessory: null },
 
-    // 오버레이 UI 상태: 'none' | 'menu' | 'shop' (열려 있으면 오버월드 갱신 정지)
+    // 오버레이 UI 상태: 'none' | 'menu' | 'shop' | 'dialogue' (열려 있으면 오버월드 갱신 정지)
     overlay: 'none',
+
+    // 퀘스트 진행 상태 { questId: 'active' | 'complete' } (Phase 6에서 localStorage 저장)
+    quests: {},
+    // 처치 카운트 등 퀘스트 진행 수치 { questId: number }
+    questProgress: {},
+    // 스토리 플래그 { key: true } (오프닝/배후 세력 떡밥 등)
+    flags: {},
+    // 도감 등록된 동물 id 목록
+    encyclopedia: [],
 
     // 화면 전환 연출 상태
     transition: { active: false, t: 0, dir: 1, onMid: null },

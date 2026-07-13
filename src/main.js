@@ -11,8 +11,9 @@ import { playSound } from './core/audio.js';
 
 import { CLASSES } from './data/classes.js';
 import { MAPS, START_MAP } from './data/maps.js';
-import { createPet, STARTER_ACTIVE_PETS, STARTER_BENCH_PETS } from './data/pets.js';
+import { createPet, STARTER_PETS } from './data/pets.js';
 import { STARTER_INVENTORY, STARTER_EQUIPMENT } from './data/items.js';
+import { grantRootSkill } from './systems/skillTree.js';
 
 import { Hero } from './entities/Hero.js';
 import { Camera } from './world/camera.js';
@@ -24,6 +25,10 @@ import { updateHud } from './ui/hud.js';
 import { updateDamageTexts } from './ui/damageText.js';
 import { toggleMenu, closeMenu } from './ui/menu.js';
 import { closeShop } from './ui/shop.js';
+import { updateTransition, renderTransition } from './render/transition.js';
+import { startDialogue } from './ui/dialogue.js';
+import { registerAnimal } from './systems/encyclopedia.js';
+import { hasSave, readSave, saveGame, saveSummary, startAutosave } from './core/saveSystem.js';
 
 // --- 캔버스 셋업 ---
 function setupCanvas() {
@@ -46,19 +51,26 @@ function selectCharacter(key) {
     game.heroKey = key;
     playSound('correct');
 
-    // 주인공 생성
+    // 주인공 생성 + 루트 스킬 자동 습득
     game.player = new Hero(CLASSES[key]);
+    grantRootSkill(game.player);
 
     // 시작 맵 로드
     game.map = MAPS[START_MAP];
     game.player.x = game.map.spawn.x;
     game.player.y = game.map.spawn.y;
 
-    // 파티 초기화 (레벨/경험치를 가진 펫 인스턴스)
-    game.party = {
-        active: STARTER_ACTIVE_PETS.map(createPet),
-        bench: STARTER_BENCH_PETS.map(createPet),
-    };
+    // 보유 펫 초기화 (레벨/경험치/스킬을 가진 펫 인스턴스)
+    game.pets = STARTER_PETS.map((sp) => {
+        const p = createPet(sp.id);
+        p.active = sp.active;
+        return p;
+    });
+    // 시작 펫은 도감에 자동 등록
+    game.encyclopedia = [];
+    game.pets.forEach((p) => registerAnimal(p.id));
+    // 퀘스트/플래그 초기화
+    game.quests = {}; game.questProgress = {}; game.flags = {};
 
     // 인벤토리/장비 초기화
     game.inventory = { ...STARTER_INVENTORY };
@@ -72,6 +84,85 @@ function selectCharacter(key) {
 
     document.getElementById('char-select-screen').classList.add('hidden');
     game.scene = 'overworld';
+
+    // 새 게임 시작 상태를 즉시 저장 + 자동저장 가동
+    saveGame();
+    startAutosave();
+
+    // 오프닝 대화(여행을 떠나는 동기 설명) 자동 재생
+    startDialogue('intro');
+}
+
+// --- 저장 데이터 불러오기(이어하기) ---
+function loadGame() {
+    const d = readSave();
+    if (!d) return false;
+
+    game.heroKey = d.heroKey;
+    const hero = new Hero(CLASSES[d.heroKey] || CLASSES.leo);
+    const ps = d.player || {};
+    Object.assign(hero, {
+        level: ps.level ?? 1, exp: ps.exp ?? 0, sp: ps.sp ?? 0,
+        hp: ps.hp, mp: ps.mp, maxHp: ps.maxHp, maxMp: ps.maxMp,
+        atk: ps.atk, def: ps.def, spd: ps.spd,
+        x: ps.x, y: ps.y, facingDir: ps.facingDir || 'down',
+        learnedSkills: [...(ps.learnedSkills || [])],
+    });
+    game.player = hero;
+
+    game.map = MAPS[d.mapId] || MAPS[START_MAP];
+    if (hero.x == null) { hero.x = game.map.spawn.x; hero.y = game.map.spawn.y; }
+
+    game.gold = d.gold || 0;
+    game.inventory = { ...(d.inventory || {}) };
+    game.bag = [...(d.bag || [])];
+    game.equipped = { weapon: null, armor: null, accessory: null, ...(d.equipped || {}) };
+
+    game.pets = (d.pets || []).map((sp) => {
+        const p = createPet(sp.id);
+        p.level = sp.level ?? 1; p.exp = sp.exp ?? 0; p.active = !!sp.active;
+        if (sp.stats) p.stats = { ...sp.stats };
+        if (sp.skills) p.skills = [...sp.skills];
+        return p;
+    });
+
+    game.quests = { ...(d.quests || {}) };
+    game.questProgress = { ...(d.questProgress || {}) };
+    game.flags = { ...(d.flags || {}) };
+    game.encyclopedia = [...(d.encyclopedia || [])];
+    game.overlay = 'none';
+
+    game.camera = new Camera();
+    initOverworld();
+
+    document.getElementById('title-screen').classList.add('hidden');
+    document.getElementById('char-select-screen').classList.add('hidden');
+    game.scene = 'overworld';
+    startAutosave();
+    return true;
+}
+
+// --- 타이틀 화면 (새 게임 / 이어하기) ---
+function initTitle() {
+    const contBtn = document.getElementById('btn-continue');
+    const contInfo = document.getElementById('continue-info');
+    const newBtn = document.getElementById('btn-newgame');
+
+    if (hasSave()) {
+        const s = saveSummary();
+        const heroName = (CLASSES[s?.heroKey]?.name) || '수호자';
+        contBtn.style.display = '';
+        contInfo.style.display = '';
+        contInfo.innerText = `${heroName} · Lv.${s?.level ?? 1}`;
+    }
+
+    contBtn.addEventListener('click', () => { playSound('correct'); loadGame(); });
+    newBtn.addEventListener('click', () => {
+        if (hasSave() && !window.confirm('기존 저장 데이터가 있습니다. 새 게임을 시작하면 진행 중인 데이터를 덮어쓰게 됩니다. 계속할까요?')) return;
+        playSound('jump');
+        document.getElementById('title-screen').classList.add('hidden');
+        document.getElementById('char-select-screen').classList.remove('hidden');
+    });
 }
 
 // --- 메인 루프 ---
@@ -81,6 +172,7 @@ function gameLoop() {
     if (!ctx) return;
 
     // 1) 업데이트
+    updateTransition();
     if (game.scene === 'overworld') {
         updateOverworld();
     } else if (game.scene === 'battle') {
@@ -98,6 +190,9 @@ function gameLoop() {
         renderBattle(ctx);
     }
     ctx.restore();
+
+    // 2.5) 화면 전환 연출 (씬 위에 덮어 그림)
+    renderTransition(ctx, game.canvas.width, game.canvas.height);
 
     // 3) HUD / 떠오르는 텍스트
     if (game.scene !== 'charSelect') {
@@ -131,6 +226,7 @@ function boot() {
     initInput(() => game.scene);
     initOverlayControls();
     renderCharSelect(selectCharacter);
+    initTitle();
     gameLoop();
 }
 

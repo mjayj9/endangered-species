@@ -31,26 +31,36 @@ export class Enemy {
         this.idleAngle += 0.01;
         this.x += Math.cos(this.idleAngle) * 0.4;
         this.y += Math.sin(this.idleAngle) * 0.4;
+
+        // 제자리 idle 애니메이션 위상
+        this.bobT = (this.bobT || Math.random() * 6) + 0.08;
     }
 
     draw(ctx, camera) {
         const camX = camera.x, camY = camera.y;
+        // 위아래 흔들림 + 좌우 기우뚱(idle)
+        const bob = Math.sin(this.bobT || 0) * 2.2;
+        const tilt = Math.sin((this.bobT || 0) * 0.7) * 0.06;
         ctx.save();
 
-        // 그림자
+        // 그림자 (고정)
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
         ctx.ellipse(this.x - camX, this.y - camY + 14, 12, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 몸통 블록 + 이모지
-        drawShadedBlock(ctx, this.x - camX - 12, this.y - camY - 6, 24, 22, this.color, 4);
+        // 몸통 + 이모지 (흔들림/기우뚱 적용)
+        ctx.save();
+        ctx.translate(this.x - camX, this.y - camY + bob);
+        ctx.rotate(tilt);
+        drawShadedBlock(ctx, -12, -6, 24, 22, this.color, 4);
         ctx.font = '18px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.emoji, this.x - camX, this.y - camY + 4);
+        ctx.fillText(this.emoji, 0, 4);
         ctx.textAlign = 'start';
         ctx.textBaseline = 'alphabetic';
+        ctx.restore();
 
         // 이름표
         ctx.fillStyle = '#e2e8f0';

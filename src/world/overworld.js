@@ -8,14 +8,18 @@ import { game } from '../core/game.js';
 import { Enemy } from '../entities/Enemy.js';
 import { Npc } from '../entities/Npc.js';
 import { Chest } from '../entities/Chest.js';
+import { Trap } from '../entities/Trap.js';
 import { MONSTERS } from '../data/monsters.js';
 import { drawPrettyTree2D } from '../render/primitives.js';
 import { checkEncounters } from './encounter.js';
 import { keys } from '../core/input.js';
+import { transition } from '../render/transition.js';
+import { saveGame } from '../core/saveSystem.js';
 
 let grassSpeckles = [];
 let npcs = [];
 let chests = [];
+let traps = [];
 
 // 현재 맵 기준으로 필드 초기화 (잔디 얼룩 패턴 + 몬스터/NPC/상자 배치)
 export function initOverworld() {
@@ -39,14 +43,15 @@ export function initOverworld() {
         return new Enemy(data, sp.x, sp.y);
     });
 
-    // NPC / 보물상자 스폰
+    // NPC / 보물상자 / 구조 덫 스폰
     npcs = (map.npcs || []).map((d) => new Npc(d));
     chests = (map.chests || []).map((d) => new Chest(d));
+    traps = (map.traps || []).map((d) => new Trap(d));
 }
 
 export function updateOverworld() {
-    // 메뉴/상점 오버레이가 열려 있으면 필드 갱신 정지(뒤 배경은 계속 렌더)
-    if (game.overlay !== 'none') return;
+    // 메뉴/상점 오버레이 또는 화면 전환 중이면 필드 갱신 정지(배경은 계속 렌더)
+    if (game.overlay !== 'none' || transition.active) return;
 
     const { player, camera, canvas, map } = game;
 
@@ -54,6 +59,12 @@ export function updateOverworld() {
     camera.follow(player, canvas, map.width, map.height);
 
     game.monsters.forEach((m) => m.update());
+    updateFollowers();
+
+    // 마을(시작 지점 부근) 진입 시 자동저장
+    const nearVillage = Math.hypot(player.x - map.spawn.x, player.y - map.spawn.y) < 220;
+    if (nearVillage && !game._inVillage) { game._inVillage = true; saveGame(); }
+    else if (!nearVillage && game._inVillage) { game._inVillage = false; }
 
     // E 상호작용: 가장 가까운 NPC/상자 (범위 내) 발동
     if (keys.e) {
@@ -68,11 +79,55 @@ export function updateOverworld() {
     checkEncounters();
 }
 
-// 상호작용 범위 안에서 가장 가까운 NPC/상자 반환
+// 출전 펫이 주인공을 졸졸 따라다니는 팔로워 위치/애니메이션 갱신
+const DIR_VEC = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+function updateFollowers() {
+    const hero = game.player;
+    const back = DIR_VEC[hero.facingDir] || DIR_VEC.down;
+    const active = game.pets.filter((p) => p.active);
+    active.forEach((p, i) => {
+        if (p._fx == null) { p._fx = hero.x; p._fy = hero.y; p._flip = false; }
+        const tx = hero.x - back.x * (30 * (i + 1)) + (i % 2 ? 14 : -14);
+        const ty = hero.y - back.y * (30 * (i + 1)) + 8;
+        const dx = tx - p._fx, dy = ty - p._fy;
+        p._fx += dx * 0.15; p._fy += dy * 0.15;
+        p._moving = Math.hypot(dx, dy) > 1.5;
+        p._walkT = (p._walkT || 0) + (p._moving ? 0.3 : 0.05);
+        if (dx < -0.4) p._flip = true; else if (dx > 0.4) p._flip = false;
+    });
+}
+
+function drawFollowers(ctx, camera) {
+    const camX = camera.x, camY = camera.y;
+    game.pets.filter((p) => p.active).forEach((p) => {
+        if (p._fx == null) return;
+        const px = p._fx - camX, py = p._fy - camY;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath();
+        ctx.ellipse(px, py + 10, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        const bob = p._moving ? Math.abs(Math.sin(p._walkT)) * 3 : Math.sin(p._walkT) * 0.6;
+        ctx.save();
+        ctx.translate(px, py - bob);
+        if (p._flip) ctx.scale(-1, 1);
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.emoji, 0, 0);
+        ctx.restore();
+    });
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+}
+
+// 상호작용 범위 안에서 가장 가까운 NPC/상자/덫 반환
 function nearestInteractable(player) {
     let best = null, bestDist = Infinity;
-    for (const o of [...npcs, ...chests]) {
-        if (o.opened) continue; // 이미 연 상자
+    for (const o of [...npcs, ...chests, ...traps]) {
+        if (o.opened) continue; // 이미 연 상자 / 구출한 덫
         const d = Math.hypot(player.x - o.x, player.y - o.y);
         if (d < o.interactRange && d < bestDist) { best = o; bestDist = d; }
     }
@@ -99,10 +154,12 @@ export function renderOverworld(ctx) {
 
     drawDeco(ctx, camX, camY);
 
-    // NPC / 상자 → 몬스터 → 플레이어 순으로 그려 겹침 자연스럽게
+    // NPC / 상자 / 덫 → 몬스터 → 플레이어 순으로 그려 겹침 자연스럽게
     npcs.forEach((n) => n.draw(ctx, camera, game.player));
     chests.forEach((c) => c.draw(ctx, camera, game.player));
+    traps.forEach((t) => t.draw(ctx, camera, game.player));
     game.monsters.forEach((m) => m.draw(ctx, camera));
+    drawFollowers(ctx, camera);
     game.player.draw(ctx, camera);
 }
 

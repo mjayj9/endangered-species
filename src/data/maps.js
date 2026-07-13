@@ -45,15 +45,26 @@ export const MAPS = {
             { monsterId: 'sludge', x: 1400, y: 320 },
         ],
 
-        // NPC 배치 (허브 마을 개념 — 시작 지점 근처에 상점 상인)
+        // NPC 배치 (허브 마을 — 시작 지점 근처)
         npcs: [
             { type: 'shop', name: '숲지기 상인', emoji: '🧑‍🌾', x: 250, y: 320 },
+            { type: 'story', name: '마을 원로', emoji: '🧓', dialogueId: 'elder', x: 470, y: 240 },
+            { type: 'story', name: '이나 박사', emoji: '👩‍🔬', dialogueId: 'doctor', x: 300, y: 430 },
+            { type: 'quest', name: '마을 아이', emoji: '🧒', questId: 'collect_juice', x: 540, y: 360 },
+            { type: 'quest', name: '숲 순찰대원', emoji: '💂', questId: 'hunt_sludge', x: 180, y: 450 },
+            { type: 'quest', name: '수의사', emoji: '👩‍⚕️', questId: 'rescue_eagle', x: 600, y: 260 },
         ],
 
         // 보물상자 배치 (E로 열어 골드 + 아이템 획득)
         chests: [
             { x: 900, y: 200, gold: 40, loot: [{ itemId: 'hi_potion', chance: 0.6 }, { itemId: 'iron_sword', chance: 0.25 }] },
             { x: 1500, y: 900, gold: 60, loot: [{ itemId: 'bark_mail', chance: 0.5 }, { itemId: 'spirit_ring', chance: 0.12 }] },
+        ],
+
+        // 구조 덫 배치 (E로 갇힌 동물을 구출해 펫으로 합류)
+        traps: [
+            { animalId: 'eagle', x: 1350, y: 250, desc: '그물에 뒤엉킨 독수리가 날개를 다쳤습니다.' },
+            { animalId: 'stork', x: 620, y: 950, desc: '오염된 늪가에서 황새가 지쳐 쓰러져 있습니다.' },
         ],
     },
 };
