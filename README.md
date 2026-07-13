@@ -49,9 +49,11 @@ src/
 ├── entities/
 │   ├── Hero.js            # 주인공(도트 렌더 + 이동 + 레벨/경험치/SP/습득 스킬)
 │   ├── Enemy.js           # 필드 몬스터 스프라이트
-│   ├── Npc.js             # 상점 상인 NPC
+│   ├── Npc.js             # 상점/스토리/퀘스트 NPC
 │   ├── Chest.js           # 보물상자(E로 열어 골드/아이템 획득)
-│   └── Trap.js            # 구조 덫(E로 동물 구출 → 펫 합류)
+│   ├── Trap.js            # 구조 덫(E로 동물 구출 → 펫 합류)
+│   ├── Portal.js          # 맵 이동 포탈(오버월드↔던전/최종장, 잠금 지원)
+│   └── BossGate.js        # 던전 보스 도전 관문(부하 소탕 후 개방)
 ├── battle/
 │   ├── battleScene.js     # 턴제 전투 씬(턴 순서·렌더·커맨드 UI·보상/레벨업/드롭)
 │   ├── battleCommands.js  # 공격/스킬/아이템/방어/도망 처리
@@ -73,6 +75,7 @@ src/
 │   ├── menu.js            # 통합 메뉴(캐릭터·장비 / 스킬트리 / 동물 보호소 / 도감)
 │   ├── shop.js            # 상점 UI(구매/되팔기)
 │   ├── dialogue.js        # 대화창(초상화·타이핑·분기 선택지)
+│   ├── ending.js          # 최종보스 격파 엔딩 화면
 │   └── damageText.js      # 떠오르는 텍스트 파티클
 └── data/                  # ★ 콘텐츠는 전부 데이터 파일로 분리(확장 용이)
     ├── classes.js         # 4직업 스탯 + 성장 곡선
@@ -80,14 +83,27 @@ src/
     ├── items.js           # 소비 아이템 + 장비 + 등급 + 상점 목록
     ├── pets.js            # 펫 정의(레벨/경험치/성장/스킬/생태) + createPet
     ├── monsters.js        # 일반 몬스터 정의 + 드롭 테이블
-    ├── bosses.js          # 지역보스 서사(동기/배후 세력 떡밥)
+    ├── bosses.js          # 지역보스+최종보스(전투 스탯·멀티 페이즈·서사 대사)
     ├── quests.js          # 사이드 퀘스트 정의(수집/처치/구출)
     ├── dialogue.js        # 스토리 대사 트리(오프닝/원로/박사)
-    └── maps.js            # 맵/지역 데이터(에메랄드 숲: 몬스터/NPC/상자/덫)
+    └── maps.js            # 맵/지역 데이터(마을 + 던전 3 + 최종장: 몬스터/NPC/포탈/보스관문)
 ```
 
-**설계 원칙**: 로직과 콘텐츠(데이터)를 분리합니다. 몬스터/맵을 추가할 때는 `src/data/`의
-해당 파일에 항목 하나만 추가하면 되도록 설계했습니다. (지역/전투/스킬 등은 이후 Phase에서 이어붙입니다.)
+**설계 원칙**: 로직과 콘텐츠(데이터)를 분리합니다. 몬스터/맵/퀘스트/아이템을 추가할 때는
+`src/data/`의 해당 파일에 항목 하나만 추가하면 됩니다. (아래 "콘텐츠 추가 가이드" 참고)
+
+---
+
+## ➕ 콘텐츠 추가 가이드 (data/ 파일만 수정)
+
+- **몬스터 추가**: `data/monsters.js` — `MONSTERS`에 `{ id, name, emoji, color, level, stats, exp, gold, drops }` 항목 추가 → 맵의 `monsterSpawns`에 배치.
+- **아이템/장비 추가**: `data/items.js` — 소비는 `{ category:'consumable', kind, power }`, 장비는 `{ category:'equipment', slot, bonus }`, `rarity`/`price` 지정. 상점 노출은 `SHOP_STOCK`에, 드롭은 몬스터/보스/상자의 `drops`/`loot`에.
+- **펫(구조 동물) 추가**: `data/pets.js` — `PETS`에 `{ baseStats, growth, skills, eco }` 추가 → 맵 `traps`에 `{ animalId, x, y, desc }` 배치(구출 시 도감 자동 등록).
+- **스킬 추가**: `data/skills.js` — `SKILLS`에 노드 추가(`class/tier/col/cost/requires` + 액티브 `target/power/mpCost` 또는 패시브 `bonus`).
+- **퀘스트 추가**: `data/quests.js` — `QUESTS`에 `{ type:'collect|kill|rescue', target, reward, lines }` 추가 → 맵 `npcs`에 `{ type:'quest', questId }` NPC 배치.
+- **NPC/대사 추가**: `data/dialogue.js`에 대사 트리 추가 → 맵 `npcs`에 `{ type:'story', dialogueId }` 배치.
+- **지역/던전 추가**: `data/maps.js` — 맵 객체 하나 추가(`theme, width, height, ground, spawn, monsterSpawns, portals, bossGate, bossWallX`), 마을 `portals`에 입구 포탈 연결.
+- **보스 추가**: `data/bosses.js` — `{ stats, exp, gold, drops, phases[threshold/atkMult/line], startLine, defeatLine }` → 던전 맵 `bossGate.bossId`로 연결.
 
 ---
 
@@ -111,8 +127,16 @@ src/
   마을 스토리/사이드 퀘스트 3종(수집/처치/구출), 지역보스 서사(밥·잭·독스 = 배후 "잿빛 컨소시엄"의
   하수인)와 최종장 떡밥, 오프닝 대화로 여행 동기 제시, 구출 시 도감 자동 등록 + 환경 지식 자연 대사.
   퀘스트/플래그는 메모리 상태로 관리(Phase 6에서 저장 연동).
-- **Phase 6 (진행 중)**
-  - **저장 시스템 (완료)** — localStorage 자동저장 1슬롯. 위치·직업·레벨/경험치/스탯·인벤토리/장비·펫(레벨/스킬)·
+- **Phase 6 (완료)**
+  - **저장 시스템** — localStorage 자동저장 1슬롯. 위치·직업·레벨/경험치/스탯·인벤토리/장비·펫(레벨/스킬)·
     스킬트리 습득·퀘스트/진행/플래그·도감·골드 전부 저장. 트리거: 전투 종료·퀘스트 완료·마을 진입·30초 주기·
     탭 닫기(beforeunload). 타이틀 화면에 저장 있으면 "이어하기" 활성화, 새 게임은 덮어쓰기 확인.
-  - (예정) 던전 3개 + 최종장 콘텐츠, 전체 밸런싱
+  - **던전 3개** — 사막(밥)/설산(잭)/늪(독스). 필드보다 강한 지역 몬스터가 여러 구간에 배치되고,
+    부하를 모두 소탕해야 보스방 장벽이 열리는 진행 구조. 보스는 체력 구간별 멀티 페이즈(패턴/공격력 변화)+
+    시작·페이즈 전환·패배 시 서사 대사, 페이즈 전환 연출(셰이크/플래시/배너).
+  - **최종장(5장)** — 잿빛 컨소시엄 본거지(삭막한 인공 테마). 지역보스 3인 격파 시 개방. 최종보스
+    "잿빛 의장 시네리스"(3페이즈 + 정체 회수 대사) → 격파 시 엔딩 화면(마무리 대사 + 수호 기록 + 크레딧).
+  - **밸런싱** — 1장→5장 몬스터 스탯/경험치/골드 점진 상승(레벨 캡 30 곡선), 장비 드롭 등급 지역별
+    상승(희귀→영웅→전설).
+
+**로드맵 완주.** 이후 콘텐츠 확장은 위 "콘텐츠 추가 가이드"대로 `data/` 파일만 수정하면 됩니다.

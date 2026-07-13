@@ -66,6 +66,75 @@ export const MAPS = {
             { animalId: 'eagle', x: 1350, y: 250, desc: '그물에 뒤엉킨 독수리가 날개를 다쳤습니다.' },
             { animalId: 'stork', x: 620, y: 950, desc: '오염된 늪가에서 황새가 지쳐 쓰러져 있습니다.' },
         ],
+
+        // 던전/최종장 입구 포탈 (requires: 필요한 플래그가 모두 true 여야 개방)
+        portals: [
+            { to: 'desert_dungeon', name: '사막 벌목기지', emoji: '🚜', x: 1620, y: 1000, color: '#d97706' },
+            { to: 'snow_dungeon', name: '설산 사냥기지', emoji: '🚁', x: 1620, y: 220, color: '#cbd5e1' },
+            { to: 'swamp_dungeon', name: '독늪 폐기기지', emoji: '🚛', x: 260, y: 1000, color: '#a855f7' },
+            { to: 'consortium_lair', name: '잿빛 컨소시엄 본거지', emoji: '🏢', x: 940, y: 1120, color: '#475569',
+              requires: ['boss_bob', 'boss_jack', 'boss_dox'], lockedText: '세 지역보스(밥·잭·독스)를 모두 격파해야 열립니다.' },
+        ],
+    },
+
+    // ===================== 던전: 사막 벌목기지 (보스 밥) =====================
+    desert_dungeon: {
+        id: 'desert_dungeon', name: '사막 벌목기지', theme: 'desert', dungeon: true,
+        width: 2400, height: 640, ground: '#f59e0b', spawn: { x: 120, y: 320 },
+        obstacles: [], deco: {},
+        portals: [{ to: 'emerald_forest', name: '마을로 돌아가기', emoji: '🏘️', x: 70, y: 320, color: '#10b981', spawn: { x: 1620, y: 1000 } }],
+        monsterSpawns: [
+            { monsterId: 'cactus_golem', x: 520, y: 240 }, { monsterId: 'timber_drone', x: 640, y: 440 },
+            { monsterId: 'sand_digger', x: 1160, y: 300 }, { monsterId: 'cactus_golem', x: 1300, y: 460 },
+            { monsterId: 'timber_drone', x: 1760, y: 240 }, { monsterId: 'sand_digger', x: 1880, y: 420 },
+        ],
+        bossWallX: 2080,
+        bossGate: { bossId: 'bob', x: 2260, y: 320 },
+    },
+
+    // ===================== 던전: 설산 사냥기지 (보스 잭) =====================
+    snow_dungeon: {
+        id: 'snow_dungeon', name: '설산 사냥기지', theme: 'snow', dungeon: true,
+        width: 2400, height: 640, ground: '#e2e8f0', spawn: { x: 120, y: 320 },
+        obstacles: [], deco: {},
+        portals: [{ to: 'emerald_forest', name: '마을로 돌아가기', emoji: '🏘️', x: 70, y: 320, color: '#10b981', spawn: { x: 1620, y: 220 } }],
+        monsterSpawns: [
+            { monsterId: 'ice_wolf', x: 520, y: 240 }, { monsterId: 'snow_sniper', x: 660, y: 440 },
+            { monsterId: 'frost_turret', x: 1160, y: 300 }, { monsterId: 'ice_wolf', x: 1300, y: 460 },
+            { monsterId: 'snow_sniper', x: 1760, y: 240 }, { monsterId: 'frost_turret', x: 1880, y: 420 },
+        ],
+        bossWallX: 2080,
+        bossGate: { bossId: 'jack', x: 2260, y: 320 },
+    },
+
+    // ===================== 던전: 독늪 폐기기지 (보스 독스) =====================
+    swamp_dungeon: {
+        id: 'swamp_dungeon', name: '독늪 폐기기지', theme: 'swamp', dungeon: true,
+        width: 2400, height: 640, ground: '#581c87', spawn: { x: 120, y: 320 },
+        obstacles: [], deco: {},
+        portals: [{ to: 'emerald_forest', name: '마을로 돌아가기', emoji: '🏘️', x: 70, y: 320, color: '#10b981', spawn: { x: 260, y: 1000 } }],
+        monsterSpawns: [
+            { monsterId: 'toxic_frog', x: 520, y: 240 }, { monsterId: 'waste_slime', x: 660, y: 440 },
+            { monsterId: 'gas_wraith', x: 1160, y: 300 }, { monsterId: 'toxic_frog', x: 1300, y: 460 },
+            { monsterId: 'waste_slime', x: 1760, y: 240 }, { monsterId: 'gas_wraith', x: 1880, y: 420 },
+        ],
+        bossWallX: 2080,
+        bossGate: { bossId: 'dox', x: 2260, y: 320 },
+    },
+
+    // ===================== 최종장: 잿빛 컨소시엄 본거지 (최종보스) =====================
+    consortium_lair: {
+        id: 'consortium_lair', name: '잿빛 컨소시엄 본거지', theme: 'ashen', dungeon: true,
+        width: 2600, height: 640, ground: '#1e293b', spawn: { x: 120, y: 320 },
+        obstacles: [], deco: {},
+        portals: [{ to: 'emerald_forest', name: '마을로 돌아가기', emoji: '🏘️', x: 70, y: 320, color: '#10b981', spawn: { x: 940, y: 1120 } }],
+        monsterSpawns: [
+            { monsterId: 'ash_drone', x: 520, y: 240 }, { monsterId: 'ash_sentinel', x: 660, y: 440 },
+            { monsterId: 'ash_sentinel', x: 1160, y: 300 }, { monsterId: 'ash_drone', x: 1300, y: 460 },
+            { monsterId: 'exec_guard', x: 1780, y: 300 }, { monsterId: 'ash_sentinel', x: 1920, y: 460 },
+        ],
+        bossWallX: 2240,
+        bossGate: { bossId: 'consortium', x: 2440, y: 320 },
     },
 };
 
