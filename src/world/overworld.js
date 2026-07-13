@@ -9,7 +9,10 @@ import { Enemy } from '../entities/Enemy.js';
 import { Npc } from '../entities/Npc.js';
 import { Chest } from '../entities/Chest.js';
 import { Trap } from '../entities/Trap.js';
+import { Portal } from '../entities/Portal.js';
+import { BossGate } from '../entities/BossGate.js';
 import { MONSTERS } from '../data/monsters.js';
+import { MAPS } from '../data/maps.js';
 import { drawPrettyTree2D } from '../render/primitives.js';
 import { checkEncounters } from './encounter.js';
 import { keys } from '../core/input.js';
@@ -20,6 +23,23 @@ let grassSpeckles = [];
 let npcs = [];
 let chests = [];
 let traps = [];
+let portals = [];
+let bossGate = null;
+
+// 맵 이동(오버월드 ↔ 던전/최종장). 포탈이 전환 연출 중간에 호출한다.
+export function travelTo(mapId, spawnPoint) {
+    const map = MAPS[mapId];
+    if (!map) return;
+    game.map = map;
+    const sp = spawnPoint || map.spawn;
+    game.player.x = sp.x; game.player.y = sp.y;
+    game.player.vx = 0; game.player.vy = 0;
+    game.pets.forEach((p) => { p._fx = null; }); // 팔로워 위치 리셋
+    game._inVillage = false;
+    initOverworld();
+    game.scene = 'overworld';
+    saveGame();
+}
 
 // 현재 맵 기준으로 필드 초기화 (잔디 얼룩 패턴 + 몬스터/NPC/상자 배치)
 export function initOverworld() {
@@ -43,10 +63,12 @@ export function initOverworld() {
         return new Enemy(data, sp.x, sp.y);
     });
 
-    // NPC / 보물상자 / 구조 덫 스폰
+    // NPC / 보물상자 / 구조 덫 / 포탈 / 보스 관문 스폰
     npcs = (map.npcs || []).map((d) => new Npc(d));
     chests = (map.chests || []).map((d) => new Chest(d));
     traps = (map.traps || []).map((d) => new Trap(d));
+    portals = (map.portals || []).map((d) => new Portal(d));
+    bossGate = map.bossGate ? new BossGate(map.bossGate) : null;
 }
 
 export function updateOverworld() {
@@ -61,10 +83,17 @@ export function updateOverworld() {
     game.monsters.forEach((m) => m.update());
     updateFollowers();
 
-    // 마을(시작 지점 부근) 진입 시 자동저장
-    const nearVillage = Math.hypot(player.x - map.spawn.x, player.y - map.spawn.y) < 220;
-    if (nearVillage && !game._inVillage) { game._inVillage = true; saveGame(); }
-    else if (!nearVillage && game._inVillage) { game._inVillage = false; }
+    // 던전 보스방 장벽: 부하가 남아 있으면 최심부 진입 차단
+    if (map.bossWallX && game.monsters.length > 0 && player.x > map.bossWallX - 24) {
+        player.x = map.bossWallX - 24;
+    }
+
+    // 마을(시작 지점 부근) 진입 시 자동저장 (마을 맵에서만)
+    if (!map.dungeon) {
+        const nearVillage = Math.hypot(player.x - map.spawn.x, player.y - map.spawn.y) < 220;
+        if (nearVillage && !game._inVillage) { game._inVillage = true; saveGame(); }
+        else if (!nearVillage && game._inVillage) { game._inVillage = false; }
+    }
 
     // E 상호작용: 가장 가까운 NPC/상자 (범위 내) 발동
     if (keys.e) {
@@ -123,11 +152,13 @@ function drawFollowers(ctx, camera) {
     ctx.textBaseline = 'alphabetic';
 }
 
-// 상호작용 범위 안에서 가장 가까운 NPC/상자/덫 반환
+// 상호작용 범위 안에서 가장 가까운 NPC/상자/덫/포탈/보스관문 반환
 function nearestInteractable(player) {
     let best = null, bestDist = Infinity;
-    for (const o of [...npcs, ...chests, ...traps]) {
-        if (o.opened) continue; // 이미 연 상자 / 구출한 덫
+    const list = [...npcs, ...chests, ...traps, ...portals];
+    if (bossGate) list.push(bossGate);
+    for (const o of list) {
+        if (o.opened) continue; // 이미 연 상자 / 구출한 덫 / 격파한 보스
         const d = Math.hypot(player.x - o.x, player.y - o.y);
         if (d < o.interactRange && d < bestDist) { best = o; bestDist = d; }
     }
@@ -154,13 +185,64 @@ export function renderOverworld(ctx) {
 
     drawDeco(ctx, camX, camY);
 
-    // NPC / 상자 / 덫 → 몬스터 → 플레이어 순으로 그려 겹침 자연스럽게
+    // 던전 테마: 삭막한 분위기 오버레이(숲이 아닌 맵)
+    if (map.theme && map.theme !== 'forest') {
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.28)';
+        ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+        drawDungeonFloor(ctx, camX, camY, map);
+    }
+
+    // 보스방 장벽 (부하 미소탕 시)
+    if (map.bossWallX && game.monsters.length > 0) {
+        const bx = map.bossWallX - camX;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(239,68,68,0.7)';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([14, 10]);
+        ctx.lineDashOffset = -Date.now() * 0.03;
+        ctx.beginPath();
+        ctx.moveTo(bx, 0); ctx.lineTo(bx, game.canvas.height);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 포탈/보스관문 → NPC/상자/덫 → 몬스터 → 플레이어 순
+    portals.forEach((p) => p.draw(ctx, camera, game.player));
+    if (bossGate) bossGate.draw(ctx, camera, game.player);
     npcs.forEach((n) => n.draw(ctx, camera, game.player));
     chests.forEach((c) => c.draw(ctx, camera, game.player));
     traps.forEach((t) => t.draw(ctx, camera, game.player));
     game.monsters.forEach((m) => m.draw(ctx, camera));
     drawFollowers(ctx, camera);
     game.player.draw(ctx, camera);
+
+    // 던전 안내 HUD (남은 부하 수)
+    if (map.dungeon) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(2,6,23,0.7)';
+        ctx.fillRect(8, 8, 210, 26);
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = "bold 12px 'Nanum Gothic'";
+        const remain = game.monsters.length;
+        ctx.fillText(remain > 0 ? `남은 부하: ${remain} — 모두 처치 시 보스방 개방` : '보스방 개방! 최심부로 진입하라', 16, 26);
+        ctx.restore();
+    }
+}
+
+// 던전 바닥 타일 격자(테마별 삭막한 인공 느낌)
+function drawDungeonFloor(ctx, camX, camY, map) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 1;
+    const size = 80;
+    const ox = -(camX % size), oy = -(camY % size);
+    for (let x = ox; x < game.canvas.width; x += size) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, game.canvas.height); ctx.stroke();
+    }
+    for (let y = oy; y < game.canvas.height; y += size) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(game.canvas.width, y); ctx.stroke();
+    }
+    ctx.restore();
 }
 
 // 숲 장식 렌더 (연못 → 피크닉/벤치 → 나무)

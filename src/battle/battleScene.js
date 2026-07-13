@@ -22,6 +22,9 @@ import { gainHeroExp, gainPetExp } from '../systems/leveling.js';
 import { learnedActiveSkillIds } from '../systems/skillTree.js';
 import { recordKill } from '../systems/quests.js';
 import { saveGame } from '../core/saveSystem.js';
+import { computeDamage } from './damageFormula.js';
+import { BOSSES } from '../data/bosses.js';
+import { showEnding } from '../ui/ending.js';
 import { attachFx, initCombatantFx, updateFx, skipFx, spawnBanner, drawProjectiles, drawParticles } from './battleFx.js';
 
 // 원거리(투사체) 직업/펫 여부 — 근접(leo/taro)은 lunge, 원거리(aria/lumi/펫)는 투사체
@@ -32,6 +35,7 @@ const THEME_BG = {
     desert: ['#b45309', '#78350f'],
     snow: ['#64748b', '#1e293b'],
     swamp: ['#581c87', '#2e1065'],
+    ashen: ['#334155', '#0b1120'],
 };
 
 let B = null; // 현재 전투 컨텍스트
@@ -55,9 +59,13 @@ export function startBattle(enemySprite) {
     const activePets = game.pets.filter((p) => p.active).map((p) => petToCombatant(p));
     const benchPets = game.pets.filter((p) => !p.active).map((p) => petToCombatant(p));
 
-    // 적: 접촉한 몬스터 + 확률적으로 1마리 추가(최대 3)
+    // 적: 접촉한 몬스터 + 확률적으로 현재 지역 몬스터 1마리 추가(최대 2)
     const enemies = [spriteToCombatant(enemySprite)];
-    if (Math.random() < 0.4) enemies.push(dataToCombatant(MONSTERS.sludge));
+    if (Math.random() < 0.4) {
+        const pool = (game.map.monsterSpawns || []).map((s) => s.monsterId);
+        const extraId = pool.length ? pool[Math.floor(Math.random() * pool.length)] : enemySprite.data.id;
+        enemies.push(dataToCombatant(MONSTERS[extraId] || enemySprite.data));
+    }
 
     B = {
         allies: [heroC, ...activePets],
@@ -142,6 +150,64 @@ function dataToCombatant(data) {
     return c;
 }
 
+// ------------------------------------------------------------
+// 보스 전투 시작 (멀티 페이즈 + 서사 대사) — 기존 턴/데미지 흐름 재사용
+// ------------------------------------------------------------
+export function startBossBattle(bossId) {
+    const bd = BOSSES[bossId];
+    const hero = game.player;
+    const eff = effectiveStats(hero);
+
+    const heroC = new Combatant({
+        name: hero.name, emoji: hero.emoji, color: hero.color, side: 'ally', isPlayer: true,
+        maxHp: eff.maxHp, hp: Math.min(hero.hp, eff.maxHp), maxMp: eff.maxMp, mp: Math.min(hero.mp, eff.maxMp),
+        atk: eff.atk, def: eff.def, spd: eff.spd,
+        skillIds: learnedActiveSkillIds(hero), ref: hero,
+    });
+    const activePets = game.pets.filter((p) => p.active).map((p) => petToCombatant(p));
+    const benchPets = game.pets.filter((p) => !p.active).map((p) => petToCombatant(p));
+
+    const boss = new Combatant({
+        name: bd.name, emoji: bd.emoji, color: '#ef4444', side: 'enemy',
+        maxHp: bd.stats.maxHp, hp: bd.stats.hp, atk: bd.stats.atk, def: bd.stats.def, spd: bd.stats.spd,
+    });
+    boss.isBoss = true;
+    boss.baseAtk = bd.stats.atk;
+    boss.reward = { exp: bd.exp || 0, gold: bd.gold || 0 };
+    boss.drops = bd.drops || [];
+
+    B = {
+        allies: [heroC, ...activePets], bench: benchPets, enemies: [boss],
+        order: [], turnIdx: 0, phase: 'intro', current: null, wait: 0, flash: 1,
+        floaters: [], log: '', sourceEnemy: null, outcome: null,
+        isBoss: true, bossId, bossData: bd, phaseIdx: 0,
+        msg(text) { this.log = text; const el = document.getElementById('battle-log'); if (el) el.innerText = text; },
+    };
+
+    attachFx(B);
+    B.allies.forEach((c) => initCombatantFx(c, c.isPlayer ? !!RANGED_HERO[hero.heroKey] : true));
+    B.bench.forEach((c) => initCombatantFx(c, true));
+    initCombatantFx(boss, false);
+
+    layoutSlots();
+    game.scene = 'battle';
+    playSound('skill');
+    clearKeys();
+    document.getElementById('battle-ui').classList.remove('hidden');
+    clearMenu();
+    bossSpeak(bd.emoji, bd.startLine); // 전투 시작 대사
+
+    window.addEventListener('keydown', onSkipKey);
+    game.viewport?.addEventListener('click', onSkipClick);
+}
+
+// 보스 대사(큰 배너 + 로그)
+function bossSpeak(emoji, text) {
+    if (!text) return;
+    B.banner = { text: `${emoji} ${text}`, timer: 130, boss: true };
+    B.msg(text);
+}
+
 // 아군/적 화면 슬롯 위치를 화면 비율(fx, fy)로 배치
 function layoutSlots() {
     assign(B.allies, 0.24);
@@ -179,6 +245,9 @@ export function updateBattle() {
             break;
         case 'resolve':
             if (--B.wait <= 0) advanceTurn();
+            break;
+        case 'bossInterlude':
+            if (--B.wait <= 0) { B.turnIdx++; nextTurn(); }
             break;
         case 'result':
             if (--B.wait <= 0) finishBattle();
@@ -222,7 +291,9 @@ function nextTurn() {
 // 펫/적 자동 행동
 function autoAct() {
     const actor = B.current;
-    if (actor.side === 'enemy') {
+    if (actor.isBoss) {
+        bossAct(actor);
+    } else if (actor.side === 'enemy') {
         const targets = B.allies.filter((a) => a.alive);
         const target = targets[Math.floor(Math.random() * targets.length)];
         B.msg(basicAttack(B, actor, target)); // 타격음은 임팩트 시점(battleFx)에서 재생
@@ -231,6 +302,26 @@ function autoAct() {
         petAutoAct(actor);
     }
     afterAction();
+}
+
+// 보스 AI: 페이즈가 오를수록 광역 강타 확률 증가
+function bossAct(actor) {
+    const alive = B.allies.filter((a) => a.alive);
+    const aoeChance = 0.2 + B.phaseIdx * 0.3;
+    if (B.phaseIdx >= 1 && alive.length > 1 && Math.random() < aoeChance) {
+        alive.forEach((t) => {
+            const dmg = computeDamage(actor, t, 110);
+            t.takeDamage(dmg);
+            B.reportHit(t, dmg, true);
+        });
+        B.msg(`${actor.name}의 광역 강타!`);
+    } else {
+        const t = alive[Math.floor(Math.random() * alive.length)];
+        const dmg = computeDamage(actor, t, 135);
+        t.takeDamage(dmg);
+        B.reportHit(t, dmg, dmg > t.maxHp * 0.3);
+        B.msg(`${actor.name}의 맹공!`);
+    }
 }
 
 // 펫 AI: 힐 스킬은 다친 아군이 있을 때만, 그 외엔 공격 스킬 사용
@@ -266,8 +357,42 @@ function afterAction() {
 }
 
 function advanceTurn() {
+    // 보스전: 페이즈 전환/격파 대사 인터루드가 있으면 먼저 처리
+    if (B.isBoss && handleBossState()) return;
     B.turnIdx++;
     nextTurn();
+}
+
+// 보스 상태 점검: 격파 직전 대사 / 체력 구간별 페이즈 전환. 인터루드 예약 시 true.
+function handleBossState() {
+    const boss = B.enemies[0];
+    if (!boss) return false;
+
+    // 격파 직전: 패배 대사 후 승리 처리
+    if (!boss.alive) {
+        if (B._defeatShown) return false;
+        B._defeatShown = true;
+        bossSpeak(boss.emoji || B.bossData.emoji, B.bossData.defeatLine);
+        B.shake = 12; boss.flash = 1; boss.flashColor = '#f87171';
+        B.phase = 'bossInterlude'; B.wait = 120;
+        return true;
+    }
+
+    // 페이즈 상승
+    const phases = B.bossData.phases || [];
+    const next = B.phaseIdx + 1;
+    if (next < phases.length && boss.hp / boss.maxHp <= phases[next].threshold) {
+        B.phaseIdx = next;
+        const ph = phases[next];
+        boss.atk = Math.round(boss.baseAtk * (ph.atkMult || 1));
+        boss.flash = 1; boss.flashColor = '#facc15';
+        B.shake = 14;
+        if (ph.line) bossSpeak(B.bossData.emoji, ph.line);
+        else spawnBanner(B, `${boss.name} — 페이즈 ${B.phaseIdx + 1}!`);
+        B.phase = 'bossInterlude'; B.wait = 120;
+        return true;
+    }
+    return false;
 }
 
 // ------------------------------------------------------------
@@ -311,7 +436,14 @@ function beginResult(outcome) {
             });
         });
 
-        let msg = `승리! 경험치 +${reward.exp}, 골드 +${reward.gold}`;
+        // 보스 격파: 플래그 설정(던전 관문 클리어/최종장 개방) + 엔딩 판정
+        if (B.isBoss) {
+            game.flags['boss_' + B.bossId] = true;
+            if (B.bossId === 'consortium') B._ending = true;
+        }
+
+        let msg = B.isBoss ? `${B.bossData.name} 격파! 경험치 +${reward.exp}, 골드 +${reward.gold}`
+                           : `승리! 경험치 +${reward.exp}, 골드 +${reward.gold}`;
         if (drops.length) msg += ` · 획득: ${drops.join(', ')}`;
         if (lvMsgs.length) { msg += ` · ${lvMsgs[lvMsgs.length - 1]}`; B.addFloater(heroC, 'LEVEL UP!', '#facc15'); }
         B.msg(msg);
@@ -343,6 +475,8 @@ function finishBattle() {
         game.monsters.forEach((m) => applyReturnCooldown(m));
     }
 
+    const ending = B.outcome === 'victory' && B._ending;
+
     playSound('jump');
     clearKeys();
     game.scene = 'overworld';
@@ -350,6 +484,9 @@ function finishBattle() {
 
     // 전투 종료(레벨업/보상 반영 후) 자동저장
     saveGame();
+
+    // 최종보스 격파 → 엔딩 화면
+    if (ending) showEnding();
 }
 
 // ------------------------------------------------------------
@@ -454,7 +591,7 @@ function renderRootMenu() {
     grid.appendChild(makeBtn('🧪 아이템', renderItemMenu, !hasAnyItem()));
     grid.appendChild(makeBtn('🛡️ 방어', playerDefend));
     grid.appendChild(makeBtn('🔄 교체', renderSwapMenu, B.bench.length === 0));
-    grid.appendChild(makeBtn('🏃 도망', playerFlee));
+    grid.appendChild(makeBtn('🏃 도망', playerFlee, B.isBoss)); // 보스전은 도망 불가
     m.appendChild(grid);
 }
 
@@ -691,7 +828,7 @@ function drawGroup(ctx, list, w, h, isAlly) {
         }
 
         // 캐릭터 이모지 (피격 시 살짝 커짐)
-        const scale = 1 + c.flash * 0.14;
+        const scale = (c.isBoss ? 1.7 : 1) * (1 + c.flash * 0.14);
         ctx.save();
         ctx.translate(px, py);
         ctx.scale(scale, scale);
